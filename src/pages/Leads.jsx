@@ -59,7 +59,7 @@ export function LeadRow({ lead, followupDays }) {
         </p>
       </div>
       <div className="hidden w-32 text-right md:block">
-        <p className="num text-sm font-semibold">{lead.status === 'Won' ? aed(lead.amount) : ''}</p>
+        <p className={cn('num text-sm', lead.status === 'Won' ? 'font-semibold' : 'text-muted-foreground')}>{lead.amount ? aed(lead.amount) : ''}</p>
         <p className="flex items-center justify-end gap-1.5 text-xs text-muted-foreground">
           <span className={cn('size-1.5 rounded-full', CHANNEL_DOT[lead.channel])} />
           {lead.channel} · {adLabel(lead)}

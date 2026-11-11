@@ -61,7 +61,7 @@ Return only what the text states. Use null for anything it does not state; never
 - channel: how the customer reached AVM. "Phone call" if they called; "Instagram" for Instagram or IG DMs; "Facebook" for Facebook or Messenger; "WhatsApp" for WhatsApp or a pasted WhatsApp chat. null if unclear.
 - campaign_id: the id of the campaign whose pre-filled message appears in the text; null otherwise.
 - status: "Won" if the note says they paid, ordered or confirmed; "Quoted" if a price was sent; "Lost" if they declined; otherwise null.
-- amount: the amount in UAE dirhams (AED, dhs, dirham) for a won order as a plain number ("2.5k" is 2500); null if not won or not stated.
+- amount: the ticket value in UAE dirhams (AED, dhs, dirham) as a plain number ("2.5k" is 2500): the order value if paid, otherwise the price quoted or asked about; null if no price is stated.
 - lost_reason: only when status is Lost, one of the listed reasons.
 - note: a short useful detail not captured elsewhere (quantity, deadline), under 15 words; null if nothing.`;
 
@@ -109,7 +109,7 @@ export async function parseLead(body, role) {
     source: campaign ? 'Ad' : null,
     campaign_id: campaign?.id ?? null,
     status: p.status,
-    amount: p.status === 'Won' && p.amount > 0 ? p.amount : null,
+    amount: p.amount > 0 ? p.amount : null,
     lost_reason: p.status === 'Lost' ? p.lost_reason : null,
     note: p.note?.trim() || null,
   };

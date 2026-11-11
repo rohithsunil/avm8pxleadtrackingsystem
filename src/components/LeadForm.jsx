@@ -69,7 +69,7 @@ function toPayload(form) {
     channel: form.channel,
     ...fromAdValue(form.ad),
     status: form.status,
-    amount: form.status === 'Won' && form.amount !== '' ? Number(form.amount) : null,
+    amount: form.amount !== '' ? Number(form.amount) : null,
     lost_reason: form.status === 'Lost' && form.lost_reason ? form.lost_reason : null,
     handled_by: form.handled_by,
     note: form.note,
@@ -363,9 +363,11 @@ export default function LeadForm({ lead, onSaved, onCancel }) {
           </div>
         </Field>
 
-        {form.status === 'Won' && (
-          <Field data-invalid={!!errors.amount} className="animate-in fade-in slide-in-from-top-1">
-            <FieldLabel htmlFor="amount">Order value</FieldLabel>
+        {(
+          <Field data-invalid={!!errors.amount}>
+            <FieldLabel htmlFor="amount">
+              Ticket value {form.status !== 'Won' && <span className="font-normal text-muted-foreground">(price quoted or asked about)</span>}
+            </FieldLabel>
             <InputGroup className={cn('h-11 rounded-xl md:h-10', glow('amount'))}>
               <InputGroupAddon>
                 <InputGroupText className="font-semibold">AED</InputGroupText>
@@ -373,6 +375,7 @@ export default function LeadForm({ lead, onSaved, onCancel }) {
               <InputGroupInput id="amount" type="number" inputMode="decimal" min="0" value={form.amount} onChange={set('amount')} placeholder="0" aria-invalid={!!errors.amount} className="num text-base md:text-sm" />
             </InputGroup>
             <FieldError>{errors.amount}</FieldError>
+            {form.status === 'Won' && !errors.amount && <FieldDescription>The order value. Counts as revenue.</FieldDescription>}
           </Field>
         )}
 

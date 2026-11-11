@@ -42,7 +42,11 @@ async function leadTotals(from, to, all, followupDays) {
             count(*) FILTER (WHERE l.quoted_at IS NOT NULL) AS quoted,
             count(*) FILTER (WHERE l.status = 'Lost' AND l.lost_reason = $3) AS junk,
             count(*) FILTER (WHERE l.status = 'New'
-                             AND l.created_at < now() - make_interval(days => $4)) AS waiting
+                             AND l.created_at < now() - make_interval(days => $4)) AS waiting,
+            COALESCE(sum(l.amount) FILTER (WHERE l.status IN ('New', 'Quoted')), 0) AS open_value,
+            count(*) FILTER (WHERE l.status IN ('New', 'Quoted') AND l.amount IS NOT NULL) AS open_priced,
+            count(*) FILTER (WHERE l.status IN ('New', 'Quoted')) AS open_count,
+            COALESCE(sum(l.amount) FILTER (WHERE l.status = 'Lost'), 0) AS lost_value
      FROM leads l WHERE ${f.sql}`,
     [...f.params, REASON_JUNK, followupDays],
   );
@@ -226,6 +230,8 @@ export async function periodReport(from, to, all = false) {
       quoted: adLeads.quoted,
       won: adLeads.sales,
     },
+    // Ticket values: what's still in play and what was lost, in AED.
+    values: { open: shown.open_value, openCount: shown.open_count, openPriced: shown.open_priced, lost: shown.lost_value },
     diagnosis: diagnose({ ad, leads: adLeads, prevAd, prevLeads: prevAdLeads, reasons, t }),
     lostReasons: all ? await lostReasons(from, to, true) : reasons,
     thresholds: t,

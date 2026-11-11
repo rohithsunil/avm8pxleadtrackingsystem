@@ -171,9 +171,9 @@ export default function LeadDetail() {
           <h1 className="font-display text-[2.5rem] leading-none md:text-5xl">{lead.customer_name}</h1>
           {lead.business_name && <p className="mt-2 text-lg text-muted-foreground">{lead.business_name}</p>}
         </div>
-        {lead.status === 'Won' && (
+        {lead.amount > 0 && (
           <div className="text-right">
-            <p className="text-xs font-semibold tracking-[0.14em] text-muted-foreground uppercase">Order value</p>
+            <p className="text-xs font-semibold tracking-[0.14em] text-muted-foreground uppercase">{lead.status === 'Won' ? 'Order value' : 'Ticket value'}</p>
             <p className="num font-display text-4xl">{aed(lead.amount)}</p>
           </div>
         )}
@@ -240,6 +240,7 @@ export default function LeadDetail() {
                   </span>
                 </Row>
                 <Row label="From an ad">{adLabel(lead)}</Row>
+                {!(lead.amount > 0) && <Row label="Ticket value"><span className="text-muted-foreground">Not set</span></Row>}
                 {lead.status === 'Lost' && <Row label="Lost because">{lead.lost_reason}</Row>}
                 <Row label="Handled by">{lead.handled_by}</Row>
                 {lead.note && <Row label="Note">{lead.note}</Row>}

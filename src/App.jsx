@@ -6,6 +6,7 @@ import { AvmLogo, AvmMark, BuiltBy, CmykBar } from '@/components/brand.jsx';
 import { LoadingBlock } from '@/components/app.jsx';
 import { Spinner } from '@/components/ui/spinner';
 import { cn } from '@/lib/utils';
+import { useIsDesktop } from '@/lib/useMediaQuery.js';
 import Login from './pages/Login.jsx';
 import LogLead from './pages/LogLead.jsx';
 import Leads from './pages/Leads.jsx';
@@ -29,6 +30,20 @@ const NAV = {
   ],
 };
 
+// On laptops staff work in the Leads table; the form stays one click away.
+const SIDEBAR_NAV = {
+  staff: [
+    { to: '/leads', label: 'Leads', icon: UsersRoundIcon },
+    { to: '/log', label: 'Log lead', icon: PlusIcon },
+  ],
+  agency: NAV.agency,
+};
+
+// Staff home: the table on laptops, the quick form on phones.
+function StaffHome() {
+  return useIsDesktop() ? <Navigate to="/leads" replace /> : <LogLead />;
+}
+
 function Sidebar({ role, signOut }) {
   return (
     <aside className="sticky top-0 hidden h-dvh w-64 shrink-0 flex-col bg-ink text-ink-foreground md:flex">
@@ -40,7 +55,7 @@ function Sidebar({ role, signOut }) {
         {role === 'agency' ? 'Campaign desk' : 'Lead desk'}
       </p>
       <nav className="flex flex-col gap-0.5 px-3">
-        {NAV[role].map(({ to, label, icon: Icon }) => (
+        {SIDEBAR_NAV[role].map(({ to, label, icon: Icon }) => (
           <NavLink
             key={to}
             to={to}
@@ -141,17 +156,18 @@ export default function App() {
           key={location.pathname}
           className={cn(
             'mx-auto animate-in px-4 pt-6 pb-28 duration-300 fade-in slide-in-from-bottom-1 md:px-10 md:pt-10 md:pb-16',
-            role === 'agency' ? 'max-w-6xl' : 'max-w-2xl',
+            // The leads table uses the whole screen; forms stay narrow and readable.
+            location.pathname === '/leads' ? 'max-w-none' : role === 'agency' && location.pathname !== '/log' ? 'max-w-6xl' : 'max-w-3xl',
           )}
         >
           <Suspense fallback={<LoadingBlock rows={4} />}>
             <Routes>
+              <Route path="/log" element={<LogLead />} />
               {role === 'staff' ? (
-                <Route path="/" element={<LogLead />} />
+                <Route path="/" element={<StaffHome />} />
               ) : (
                 <>
                   <Route path="/" element={<Dashboard />} />
-                  <Route path="/log" element={<LogLead />} />
                   <Route path="/ad-data" element={<AdData />} />
                   <Route path="/settings" element={<Settings />} />
                 </>

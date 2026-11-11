@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
-import { ArrowUpRightIcon, CheckIcon, ClipboardPasteIcon, CornerDownLeftIcon, PlusIcon, XIcon } from 'lucide-react';
+import { ArrowUpRightIcon, CheckIcon, ClipboardPasteIcon, CornerDownLeftIcon, PlusIcon, SparklesIcon, XIcon } from 'lucide-react';
 import { api, storage } from '@/lib/api.js';
 import { phoneDisplay, shortDate } from '@/lib/format.js';
 import { adOptions, adValue, CHANNEL_DOT, defaultAdValue, fromAdValue } from '@/lib/leadFields.js';
@@ -40,7 +40,7 @@ function useColumns() {
       { key: 'ad', label: 'From ad', width: 180, type: 'select', options: ads, error: 'campaign_id' },
       { key: 'service', label: 'Service', width: 160, type: 'select', required: true, options: options.services.map((s) => ({ value: s, label: s })), blank: 'Choose…' },
       { key: 'status', label: 'Status', width: 110, type: 'select', options: options.statuses.map((s) => ({ value: s, label: s })) },
-      { key: 'amount', label: 'Value (AED)', width: 120, type: 'money', placeholder: '0', when: (r) => r.status === 'Won' },
+      { key: 'amount', label: 'Ticket value (AED)', width: 150, type: 'money', placeholder: 'Add price' },
       {
         key: 'lost_reason', label: 'Lost because', width: 170, type: 'select', blank: 'Choose…',
         options: options.lostReasons.map((s) => ({ value: s, label: s })), when: (r) => r.status === 'Lost',
@@ -169,7 +169,7 @@ function Cell({ col, row, rowIndex, colIndex, onChange, onCommit, onKeyDown, onP
         {...common}
         type="text"
         inputMode={col.type === 'money' ? 'decimal' : col.inputMode}
-        placeholder={disabled ? '' : col.placeholder}
+        placeholder={disabled || !row._key ? '' : col.placeholder}
         value={row[col.key] ?? ''}
         onChange={(e) => onChange(col.key, e.target.value)}
         onBlur={() => onCommit(col.key)}
@@ -194,6 +194,51 @@ function Cell({ col, row, rowIndex, colIndex, onChange, onCommit, onKeyDown, onP
         <div className={cn(dot && '[&>*]:pl-6')}>{field}</div>
       )}
     </td>
+  );
+}
+
+// ---- paste a message: Claude fills the new row ----
+
+function PasteBar({ onFill }) {
+  const [text, setText] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  async function fill(e) {
+    e.preventDefault();
+    if (text.trim().length < 3) return;
+    setBusy(true);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8000);
+    try {
+      const { fields } = await api('/parse', { method: 'POST', body: { text }, signal: controller.signal });
+      if (!Object.keys(fields).length) toast.error('Nothing to fill from that text.');
+      else {
+        onFill(fields);
+        setText('');
+        toast.success('New row filled. Check it, then press Enter.');
+      }
+    } catch (err) {
+      toast.error(err.name === 'AbortError' ? 'That took too long. Type it in instead.' : err.message);
+    } finally {
+      clearTimeout(timer);
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form onSubmit={fill} className="flex items-center gap-2 rounded-xl bg-ink p-1.5 pl-3 text-ink-foreground">
+      <SparklesIcon className="size-4 shrink-0 text-brand-yellow" />
+      <input
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        placeholder="Paste a customer's message and Claude fills the new row…"
+        aria-label="Paste a message to fill the new row"
+        className="h-9 min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-ink-muted"
+      />
+      <Button type="submit" size="sm" disabled={busy || text.trim().length < 3} className="h-9 rounded-lg bg-ink-foreground px-3 text-ink hover:bg-white">
+        {busy ? <Spinner /> : 'Fill row'}
+      </Button>
+    </form>
   );
 }
 
@@ -324,7 +369,7 @@ export default function LeadTable({ leads, onCreated, onUpdated, followupDays, h
     const pendingWon = row.status === 'Won' && !(Number(row.amount) > 0);
     const pendingLost = row.status === 'Lost' && !row.lost_reason;
     if ((pendingWon || pendingLost) && (keys.includes('status') || keys.includes('amount') || keys.includes('lost_reason'))) {
-      setRowState((s) => ({ ...s, [id]: { errors: pendingWon ? { amount: 'Enter the order value to save' } : { lost_reason: 'Pick a reason to save' } } }));
+      setRowState((s) => ({ ...s, [id]: { errors: pendingWon ? { amount: 'Enter the ticket value to save' } : { lost_reason: 'Pick a reason to save' } } }));
       return;
     }
     dirty.current[id] = new Set();
@@ -344,8 +389,23 @@ export default function LeadTable({ leads, onCreated, onUpdated, followupDays, h
   // Commit after state has updated (selects commit on change).
   const commitSoon = (id) => setTimeout(() => commitRow(id), 0);
 
+  // Put Claude's fields into the first new row.
+  function fillFromMessage(fields) {
+    const target = drafts.find(isBlank) ?? drafts[0];
+    const patch = {};
+    for (const [k, v] of Object.entries(fields)) {
+      if (k === 'campaign_id') patch.ad = `c:${v}`;
+      else if (k === 'phone') patch.phone = phoneDisplay(v);
+      else if (k === 'amount') patch.amount = String(v);
+      else if (k !== 'source') patch[k] = v;
+    }
+    setDrafts((ds) => ds.map((d) => (d._key === target._key ? { ...d, ...patch } : d)));
+    focusCell(drafts.indexOf(target), 0);
+  }
+
   return (
     <div className="space-y-3">
+      <PasteBar onFill={fillFromMessage} />
       <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground">
         <p className="flex flex-wrap items-center gap-x-4 gap-y-1">
           <span className="inline-flex items-center gap-1.5">

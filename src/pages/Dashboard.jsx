@@ -189,7 +189,7 @@ function Tiles({ now, before }) {
 
 // ---------- Funnel ----------
 
-function Funnel({ funnel }) {
+function Funnel({ funnel, values }) {
   // Bars are scaled to conversations: clicks are usually 20x larger and would
   // shrink every later step to a sliver, so they are shown as a line above.
   const steps = [
@@ -230,15 +230,21 @@ function Funnel({ funnel }) {
           );
         })}
       </ol>
+      {values.openCount > 0 && (
+        <p className="num mt-5 border-t pt-4 text-sm text-muted-foreground">
+          <span className="font-display text-xl text-foreground">{aed(values.open)}</span> still in play across {values.openCount} open lead{values.openCount === 1 ? '' : 's'}
+          {values.openPriced < values.openCount && ` (${values.openCount - values.openPriced} without a ticket value)`}
+        </p>
+      )}
     </Section>
   );
 }
 
-function LostReasons({ rows }) {
+function LostReasons({ rows, lostValue }) {
   const total = rows.reduce((s, r) => s + r.count, 0);
   const top = Math.max(...rows.map((r) => r.count), 1);
   return (
-    <Section title="Why leads were lost" description={total ? `${total} lost in this period` : undefined}>
+    <Section title="Why leads were lost" description={total ? `${total} lost in this period${lostValue > 0 ? ` · ${aed(lostValue)} in ticket value` : ''}` : undefined}>
       {rows.length === 0 ? (
         <p className="py-6 text-center text-sm text-muted-foreground">No lost leads in this period.</p>
       ) : (
@@ -427,8 +433,8 @@ export default function Dashboard() {
           <Verdict diagnosis={data.diagnosis} />
           <Tiles now={data.headline} before={data.previous} />
           <div className="grid gap-4 lg:grid-cols-2">
-            <Funnel funnel={data.funnel} />
-            <LostReasons rows={data.lostReasons} />
+            <Funnel funnel={data.funnel} values={data.values} />
+            <LostReasons rows={data.lostReasons} lostValue={data.values.lost} />
           </div>
           <Trend rows={data.trend} />
           <DataTable

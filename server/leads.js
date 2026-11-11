@@ -29,7 +29,7 @@ const baseSchema = z.object({
 // Rules that depend on more than one field.
 async function checkRules(lead) {
   const fields = {};
-  if (lead.status === 'Won' && !(lead.amount > 0)) fields.amount = 'Enter the amount for a won lead';
+  if (lead.status === 'Won' && !(lead.amount > 0)) fields.amount = 'Enter the ticket value for a won lead';
   if (lead.status === 'Lost' && !lead.lost_reason) fields.lost_reason = 'Pick why it was lost';
   if (lead.campaign_id) {
     const exists = await one('SELECT 1 FROM campaigns WHERE id = $1', [lead.campaign_id]);
@@ -38,11 +38,12 @@ async function checkRules(lead) {
   if (Object.keys(fields).length) throw new HttpError(400, 'Please check the highlighted fields', fields);
 }
 
-// Only keep amount / lost reason / campaign when they apply.
+// Only keep lost reason / campaign when they apply. The ticket value (amount)
+// is kept at every stage: the quoted price, then the order value once won.
 function tidy(lead) {
   return {
     ...lead,
-    amount: lead.status === 'Won' ? lead.amount : null,
+    amount: lead.amount > 0 ? lead.amount : null,
     lost_reason: lead.status === 'Lost' ? lead.lost_reason : null,
     campaign_id: lead.source === 'Ad' ? lead.campaign_id : null,
   };
