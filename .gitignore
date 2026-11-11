@@ -3,3 +3,6 @@ dist
 .env
 .netlify
 .DS_Store
+.neon
+.env.local
+.env.*.local
