@@ -4,7 +4,7 @@ import { toast } from 'sonner';
 import { ArrowUpRightIcon, CheckIcon, ClipboardPasteIcon, CornerDownLeftIcon, PlusIcon, SparklesIcon, XIcon } from 'lucide-react';
 import { api, storage } from '@/lib/api.js';
 import { phoneDisplay, shortDate } from '@/lib/format.js';
-import { adOptions, adValue, CHANNEL_DOT, defaultAdValue, fromAdValue } from '@/lib/leadFields.js';
+import { adValue, CHANNEL_DOT, fromAdValue } from '@/lib/leadFields.js';
 import { useSession } from '@/session.jsx';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
@@ -19,7 +19,6 @@ import { cn } from '@/lib/utils';
  */
 
 const HANDLER_KEY = 'avm:handled_by';
-const AD_KEY = 'avm:ad';
 
 const STATUS_TEXT = {
   New: 'text-foreground',
@@ -30,27 +29,26 @@ const STATUS_TEXT = {
 
 function useColumns() {
   const { options } = useSession();
-  return useMemo(() => {
-    const ads = adOptions(options.campaigns);
-    return [
+  return useMemo(
+    () => [
       { key: 'customer_name', label: 'Customer', width: 180, type: 'text', required: true, placeholder: 'Name', sticky: true },
-      { key: 'business_name', label: 'Business', width: 170, type: 'text', placeholder: 'Optional' },
       { key: 'phone', label: 'Number', width: 150, type: 'text', required: true, placeholder: '050 123 4567', inputMode: 'tel' },
-      { key: 'channel', label: 'Channel', width: 130, type: 'select', options: options.channels.map((c) => ({ value: c, label: c })) },
-      { key: 'ad', label: 'From ad', width: 180, type: 'select', options: ads, error: 'campaign_id' },
-      { key: 'service', label: 'Service', width: 160, type: 'select', required: true, options: options.services.map((s) => ({ value: s, label: s })), blank: 'Choose…' },
-      { key: 'status', label: 'Status', width: 110, type: 'select', options: options.statuses.map((s) => ({ value: s, label: s })) },
       { key: 'amount', label: 'Ticket value (AED)', width: 150, type: 'money', placeholder: 'Add price' },
+      { key: 'status', label: 'Status', width: 110, type: 'select', options: options.statuses.map((s) => ({ value: s, label: s })) },
+      { key: 'channel', label: 'Channel', width: 130, type: 'select', options: options.channels.map((c) => ({ value: c, label: c })) },
+      { key: 'service', label: 'Service', width: 180, type: 'text', required: true, placeholder: 'e.g. Business cards', list: 'table-service-suggestions' },
+      options.staff.length
+        ? { key: 'handled_by', label: 'Handled by', width: 140, type: 'select', required: true, blank: 'Choose…', options: options.staff.map((s) => ({ value: s, label: s })) }
+        : { key: 'handled_by', label: 'Handled by', width: 140, type: 'text', required: true, placeholder: 'Name' },
+      { key: 'business_name', label: 'Business', width: 170, type: 'text', placeholder: 'Optional' },
       {
         key: 'lost_reason', label: 'Lost because', width: 170, type: 'select', blank: 'Choose…',
         options: options.lostReasons.map((s) => ({ value: s, label: s })), when: (r) => r.status === 'Lost',
       },
-      options.staff.length
-        ? { key: 'handled_by', label: 'Handled by', width: 140, type: 'select', required: true, blank: 'Choose…', options: options.staff.map((s) => ({ value: s, label: s })) }
-        : { key: 'handled_by', label: 'Handled by', width: 140, type: 'text', required: true, placeholder: 'Name' },
       { key: 'note', label: 'Note', width: 220, type: 'text', placeholder: 'Quantity, deadline…' },
-    ];
-  }, [options]);
+    ],
+    [options],
+  );
 }
 
 // ---- row <-> API ----
@@ -89,13 +87,13 @@ function errorsFor(fields = {}) {
 
 let draftSeq = 0;
 function blankDraft(options) {
-  const remembered = storage.get(AD_KEY);
-  const validAd = remembered && adOptions(options.campaigns).some((o) => o.value === remembered);
   return {
     _key: `d${++draftSeq}`,
     customer_name: '', business_name: '', phone: '', service: '',
     channel: 'WhatsApp',
-    ad: validAd ? remembered : defaultAdValue(options.campaigns),
+    // Not shown in the table: every lead counts as from the ads, and Claude
+    // links a campaign when it spots that ad's pre-filled message.
+    ad: 'ad',
     status: 'New', amount: '', lost_reason: '',
     handled_by: storage.get(HANDLER_KEY) ?? '',
     note: '',
@@ -174,8 +172,9 @@ function Cell({ col, row, rowIndex, colIndex, onChange, onCommit, onKeyDown, onP
         onChange={(e) => onChange(col.key, e.target.value)}
         onBlur={() => onCommit(col.key)}
         onPaste={onPaste}
+        list={col.list}
         autoComplete="off"
-        className={cn(common.className, col.type === 'money' && 'num text-right')}
+        className={cn(common.className, col.type === 'money' && cn('num text-right', row.status === 'Won' && row.amount && 'font-semibold text-success-foreground'))}
       />
     );
   const dot = col.key === 'channel' && CHANNEL_DOT[row.channel];
@@ -302,7 +301,6 @@ export default function LeadTable({ leads, onCreated, onUpdated, followupDays, h
       return { ...s, [key]: { ...s[key], errors: errs } };
     });
     if (field === 'handled_by' && value) storage.set(HANDLER_KEY, value);
-    if (field === 'ad') storage.set(AD_KEY, value);
   }
 
   async function saveDraft(key) {
@@ -318,7 +316,7 @@ export default function LeadTable({ leads, onCreated, onUpdated, followupDays, h
       setDrafts((ds) => {
         const rest = ds.filter((d) => d._key !== key);
         // Keep one blank row ready, carrying over channel / ad / who is logging.
-        return rest.some(isBlank) ? rest : [{ ...blankDraft(options), channel: draft.channel, ad: draft.ad }, ...rest];
+        return rest.some(isBlank) ? rest : [{ ...blankDraft(options), channel: draft.channel }, ...rest];
       });
       setDraftState((s) => ({ ...s, [key]: undefined }));
       focusCell(0, 0);
@@ -343,7 +341,7 @@ export default function LeadTable({ leads, onCreated, onUpdated, followupDays, h
     if (!text.includes('\t') && !text.trim().includes('\n')) return; // a plain single value: normal paste
     e.preventDefault();
     const target = drafts.find((d) => d._key === draftKey);
-    const template = { ...blankDraft(options), channel: target.channel, ad: target.ad, handled_by: target.handled_by };
+    const template = { ...blankDraft(options), channel: target.channel, handled_by: target.handled_by };
     const pasted = parsePaste(text, colIndex, columns, options, template);
     setDrafts((ds) => {
       const i = ds.findIndex((d) => d._key === draftKey);
@@ -406,6 +404,11 @@ export default function LeadTable({ leads, onCreated, onUpdated, followupDays, h
   return (
     <div className="space-y-3">
       <PasteBar onFill={fillFromMessage} />
+      <datalist id="table-service-suggestions">
+        {options.services.map((s) => (
+          <option key={s} value={s} />
+        ))}
+      </datalist>
       <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground">
         <p className="flex flex-wrap items-center gap-x-4 gap-y-1">
           <span className="inline-flex items-center gap-1.5">

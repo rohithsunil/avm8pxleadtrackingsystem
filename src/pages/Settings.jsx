@@ -361,7 +361,7 @@ export default function Settings() {
       <PageHeader eyebrow="Set up once" title="Settings" />
       <Campaigns campaigns={options.campaigns} />
       <div className="grid gap-4 lg:grid-cols-2">
-        <NameList title="Services" description="What AVM sells. Shown in the lead form." settingKey="services" items={options.services} placeholder="e.g. Vehicle wraps" />
+        <NameList title="Services" description="What AVM usually sells. Offered as suggestions when typing a service." settingKey="services" items={options.services} placeholder="e.g. Vehicle wraps" />
         <NameList title="Staff" description="Who answers WhatsApp at AVM." settingKey="staff" items={options.staff} placeholder="e.g. Fatima" />
       </div>
       <AiKey />

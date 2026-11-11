@@ -15,7 +15,7 @@ const baseSchema = z.object({
     .string()
     .transform(normalizePhone)
     .refine(isValidPhone, 'Enter a valid phone number'),
-  service: z.string().trim().min(1, 'Pick a service').max(60),
+  service: z.string().trim().min(1, 'Enter the service').max(60),
   channel: z.enum(CHANNELS, { message: 'Pick the channel' }).default('WhatsApp'),
   source: z.enum(SOURCES).default('Ad'),
   campaign_id: z.number().int().positive().nullable().default(null),
@@ -77,13 +77,25 @@ export async function listLeads(params) {
 
   const limit = Math.min(Number(params.get('limit')) || 50, 200);
   const offset = Math.max(Number(params.get('offset')) || 0, 0);
-  const rows = await query(
-    `SELECT ${LEAD_COLUMNS} FROM leads l LEFT JOIN campaigns c ON c.id = l.campaign_id
-     ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
-     ORDER BY l.created_at DESC LIMIT ${limit + 1} OFFSET ${offset}`,
-    values,
-  );
-  return { leads: rows.slice(0, limit), hasMore: rows.length > limit };
+  const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+  const [rows, totals] = await Promise.all([
+    query(
+      `SELECT ${LEAD_COLUMNS} FROM leads l LEFT JOIN campaigns c ON c.id = l.campaign_id
+       ${whereSql}
+       ORDER BY l.created_at DESC LIMIT ${limit + 1} OFFSET ${offset}`,
+      values,
+    ),
+    // Totals for everything matching the search/filter, not just this page.
+    one(
+      `SELECT count(*) FILTER (WHERE NOT l.duplicate) AS leads,
+              count(*) FILTER (WHERE NOT l.duplicate AND l.status = 'Won') AS won,
+              COALESCE(sum(l.amount) FILTER (WHERE NOT l.duplicate AND l.status = 'Won'), 0) AS won_value,
+              COALESCE(sum(l.amount) FILTER (WHERE NOT l.duplicate AND l.status IN ('New', 'Quoted')), 0) AS open_value
+       FROM leads l ${whereSql}`,
+      values,
+    ),
+  ]);
+  return { leads: rows.slice(0, limit), hasMore: rows.length > limit, totals };
 }
 
 export async function findByPhone(rawPhone) {

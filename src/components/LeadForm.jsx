@@ -4,7 +4,7 @@ import { toast } from 'sonner';
 import { ArrowUpRightIcon, HistoryIcon, SparklesIcon } from 'lucide-react';
 import { api, storage } from '@/lib/api.js';
 import { aed, shortDate } from '@/lib/format.js';
-import { adOptions, adValue, defaultAdValue, fromAdValue } from '@/lib/leadFields.js';
+import { adValue, fromAdValue } from '@/lib/leadFields.js';
 import { useSession } from '@/session.jsx';
 import { ErrorAlert, StatusBadge } from '@/components/app.jsx';
 import { PhoneInput } from '@/components/reui/phone-input';
@@ -20,7 +20,6 @@ import { Spinner } from '@/components/ui/spinner';
 import { cn } from '@/lib/utils';
 
 const HANDLER_KEY = 'avm:handled_by';
-const AD_KEY = 'avm:ad';
 
 // Phone-friendly control sizing used across the form.
 const CONTROL = 'h-11 rounded-xl text-base md:h-10 md:text-sm';
@@ -32,16 +31,14 @@ const STATUS_ON = {
   Lost: 'aria-pressed:border-destructive/40 aria-pressed:bg-destructive/10 aria-pressed:text-destructive-foreground',
 };
 
-function blankLead(campaigns) {
-  const remembered = storage.get(AD_KEY);
-  const validAd = remembered && adOptions(campaigns).some((o) => o.value === remembered);
+function blankLead() {
   return {
     customer_name: '',
     business_name: '',
     phone: '',
     service: '',
     channel: 'WhatsApp',
-    ad: validAd ? remembered : defaultAdValue(campaigns),
+    ad: 'ad', // hidden: Claude links a campaign when it spots the ad's pre-filled message
     status: 'New',
     amount: '',
     lost_reason: '',
@@ -50,9 +47,9 @@ function blankLead(campaigns) {
   };
 }
 
-function fromLead(lead, campaigns) {
+function fromLead(lead) {
   return {
-    ...blankLead(campaigns),
+    ...blankLead(),
     ...Object.fromEntries(Object.entries(lead).map(([k, v]) => [k, v ?? ''])),
     phone: lead.phone ? `+${lead.phone}` : '',
     ad: adValue(lead),
@@ -198,7 +195,7 @@ function Segmented({ options, value, onChange, label, itemClass, columns }) {
 export default function LeadForm({ lead, onSaved, onCancel }) {
   const { options } = useSession();
   const isNew = !lead;
-  const [form, setForm] = useState(() => (lead ? fromLead(lead, options.campaigns) : blankLead(options.campaigns)));
+  const [form, setForm] = useState(() => (lead ? fromLead(lead) : blankLead()));
   const [errors, setErrors] = useState({});
   const [formError, setFormError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -207,7 +204,6 @@ export default function LeadForm({ lead, onSaved, onCancel }) {
   const checkedPhone = useRef('');
   const top = useRef(null);
 
-  const ads = adOptions(options.campaigns, lead?.campaign_id);
 
   function update(patch) {
     setForm((f) => ({ ...f, ...patch }));
@@ -248,9 +244,7 @@ export default function LeadForm({ lead, onSaved, onCancel }) {
   useEffect(() => {
     if (form.handled_by) storage.set(HANDLER_KEY, form.handled_by);
   }, [form.handled_by]);
-  useEffect(() => {
-    if (isNew && form.ad) storage.set(AD_KEY, form.ad);
-  }, [isNew, form.ad]);
+
 
   async function save(e) {
     e.preventDefault();
@@ -262,7 +256,7 @@ export default function LeadForm({ lead, onSaved, onCancel }) {
         : await api(`/leads/${lead.id}`, { method: 'PATCH', body: toPayload(form) });
       if (isNew) {
         // Ready for the next one; keep who is logging, the channel and the ad.
-        setForm({ ...blankLead(options.campaigns), channel: form.channel, ad: form.ad });
+        setForm({ ...blankLead(), channel: form.channel });
         setRepeat(null);
         checkedPhone.current = '';
         top.current?.scrollIntoView({ behavior: 'smooth' });
@@ -316,37 +310,33 @@ export default function LeadForm({ lead, onSaved, onCancel }) {
 
         <Field data-invalid={!!errors.service}>
           <FieldLabel htmlFor="service">Service</FieldLabel>
-          <NativeSelect id="service" value={form.service} onChange={set('service')} aria-invalid={!!errors.service} className={cn('w-full [&_select]:h-11 [&_select]:rounded-xl [&_select]:text-base md:[&_select]:h-10 md:[&_select]:text-sm', glow('service'))}>
-            <NativeSelectOption value="">Choose a service…</NativeSelectOption>
+          <Input
+            id="service"
+            list="service-suggestions"
+            value={form.service}
+            onChange={set('service')}
+            placeholder="What do they want? e.g. 500 business cards"
+            autoComplete="off"
+            aria-invalid={!!errors.service}
+            className={cn(CONTROL, glow('service'))}
+          />
+          <datalist id="service-suggestions">
             {options.services.map((s) => (
-              <NativeSelectOption key={s} value={s}>
-                {s}
-              </NativeSelectOption>
+              <option key={s} value={s} />
             ))}
-          </NativeSelect>
+          </datalist>
           <FieldError>{errors.service}</FieldError>
         </Field>
 
         <FieldSeparator />
 
-        <div className="grid gap-5 md:grid-cols-2">
+        <div className="grid gap-5">
           <Field data-invalid={!!errors.channel}>
             <FieldLabel>Came in on</FieldLabel>
             <div className={cn('rounded-xl', glow('channel'))}>
               <Segmented label="Channel" options={options.channels} value={form.channel} onChange={set('channel')} itemClass={() => 'px-1 text-[0.82rem]'} />
             </div>
             <FieldError>{errors.channel}</FieldError>
-          </Field>
-          <Field data-invalid={!!errors.campaign_id}>
-            <FieldLabel htmlFor="ad">From an ad?</FieldLabel>
-            <NativeSelect id="ad" value={form.ad} onChange={set('ad')} aria-invalid={!!errors.campaign_id} className={cn('w-full [&_select]:h-11 [&_select]:rounded-xl [&_select]:text-base md:[&_select]:h-10 md:[&_select]:text-sm', glow('ad'))}>
-              {ads.map((o) => (
-                <NativeSelectOption key={o.value} value={o.value}>
-                  {o.label}
-                </NativeSelectOption>
-              ))}
-            </NativeSelect>
-            <FieldError>{errors.campaign_id}</FieldError>
           </Field>
         </div>
 

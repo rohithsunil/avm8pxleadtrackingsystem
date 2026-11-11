@@ -11,9 +11,7 @@ import { Frame, FramePanel } from '@/components/reui/frame';
 import { DateSelector } from '@/components/reui/date-selector';
 import { Button } from '@/components/ui/button';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
-import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Switch } from '@/components/ui/switch';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { cn } from '@/lib/utils';
@@ -200,7 +198,7 @@ function Funnel({ funnel, values }) {
   ];
   const top = Math.max(...steps.map((s) => s.value), 1);
   return (
-    <Section title="Where leads drop off" description="Ad leads only">
+    <Section title="Where leads drop off">
       <p className="num mb-5 text-sm text-muted-foreground">
         <span className="font-semibold text-foreground">{count(funnel.clicks)}</span> link clicks
         {funnel.clicks > 0 && ` → ${pct(funnel.conversations / funnel.clicks)} opened a WhatsApp chat`}
@@ -359,7 +357,6 @@ function DataTable({ title, description, columns, rows, empty }) {
 export default function Dashboard() {
   const [preset, setPreset] = useState('4weeks');
   const [range, setRange] = useState(() => presetRange('4weeks'));
-  const [includeOther, setIncludeOther] = useState(false);
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
@@ -367,7 +364,7 @@ export default function Dashboard() {
   useEffect(() => {
     let stale = false;
     setLoading(true);
-    const q = new URLSearchParams({ from: range.from, to: range.to, all: includeOther ? '1' : '0' });
+    const q = new URLSearchParams({ from: range.from, to: range.to, all: '1' });
     api(`/dashboard?${q}`).then(
       (d) => !stale && (setData(d), setError(''), setLoading(false)),
       (err) => !stale && (setError(err.message), setLoading(false)),
@@ -375,7 +372,7 @@ export default function Dashboard() {
     return () => {
       stale = true;
     };
-  }, [range.from, range.to, includeOther]);
+  }, [range.from, range.to]);
 
   return (
     <div className="space-y-6">
@@ -417,10 +414,6 @@ export default function Dashboard() {
               }}
             />
           </div>
-          <Label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-muted-foreground">
-            <Switch checked={includeOther} onCheckedChange={setIncludeOther} />
-            Include non-ad leads
-          </Label>
         </div>
       </div>
 
@@ -439,7 +432,6 @@ export default function Dashboard() {
           <Trend rows={data.trend} />
           <DataTable
             title="By channel"
-            description={includeOther ? 'All leads' : 'Ad leads only'}
             rows={data.byChannel}
             empty="No leads in this period."
             columns={[
@@ -461,7 +453,6 @@ export default function Dashboard() {
           <div className="grid gap-4 xl:grid-cols-[1.4fr_1fr]">
             <DataTable
               title="By campaign"
-              description="Ad leads only"
               rows={data.byCampaign}
               empty="No campaign activity yet. Add campaigns in Settings and weekly numbers in Ad data."
               columns={[

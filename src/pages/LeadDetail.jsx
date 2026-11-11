@@ -4,7 +4,7 @@ import { toast } from 'sonner';
 import { ArrowLeftIcon, ClockAlertIcon, CopyXIcon, MessageCircleIcon, PencilIcon, PhoneIcon } from 'lucide-react';
 import { api } from '@/lib/api.js';
 import { aed, fullDate, isWaiting, phoneDisplay, timeAgo } from '@/lib/format.js';
-import { adLabel, CHANNEL_DOT } from '@/lib/leadFields.js';
+import { CHANNEL_DOT } from '@/lib/leadFields.js';
 import { useSession } from '@/session.jsx';
 import LeadForm from '@/components/LeadForm.jsx';
 import { ErrorAlert, LoadingBlock, Section, StatusBadge, useConfirm } from '@/components/app.jsx';
@@ -239,7 +239,7 @@ export default function LeadDetail() {
                     {lead.channel}
                   </span>
                 </Row>
-                <Row label="From an ad">{adLabel(lead)}</Row>
+                {lead.campaign_name && <Row label="Campaign">{lead.campaign_name}</Row>}
                 {!(lead.amount > 0) && <Row label="Ticket value"><span className="text-muted-foreground">Not set</span></Row>}
                 {lead.status === 'Lost' && <Row label="Lost because">{lead.lost_reason}</Row>}
                 <Row label="Handled by">{lead.handled_by}</Row>

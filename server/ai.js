@@ -57,7 +57,7 @@ Return only what the text states. Use null for anything it does not state; never
 - customer_name: the person's name, written as it appears.
 - business_name: the customer's business, if one is named.
 - phone: the number as written, including any country code, if a phone number appears.
-- service: must be exactly one of the services listed, picking the closest match; null if none fits.
+- service: what the customer wants, in a few words ("Business cards", "Shop signage"). Use a listed service's exact wording when one fits; otherwise describe it briefly. null if not stated.
 - channel: how the customer reached AVM. "Phone call" if they called; "Instagram" for Instagram or IG DMs; "Facebook" for Facebook or Messenger; "WhatsApp" for WhatsApp or a pasted WhatsApp chat. null if unclear.
 - campaign_id: the id of the campaign whose pre-filled message appears in the text; null otherwise.
 - status: "Won" if the note says they paid, ordered or confirmed; "Quoted" if a price was sent; "Lost" if they declined; otherwise null.
@@ -71,7 +71,7 @@ export async function parseLead(body, role) {
   const campaigns = options.campaigns.filter((c) => c.active);
 
   const context = [
-    `Services: ${options.services.join(' | ') || '(none set)'}`,
+    `Usual services: ${options.services.join(' | ') || '(none set)'}`,
     `Lost reasons: ${LOST_REASONS.join(' | ')}`,
     `Campaigns (id: pre-filled message):\n${campaigns.map((c) => `${c.id}: ${c.prefilled_message || c.name}`).join('\n') || '(none)'}`,
   ].join('\n\n');
@@ -97,7 +97,8 @@ export async function parseLead(body, role) {
 
   // Keep only values the form can use.
   const p = response.parsed_output;
-  const service = options.services.find((s) => s.toLowerCase() === p.service?.toLowerCase()) ?? null;
+  // Service is free text: prefer the list's spelling when it matches.
+  const service = options.services.find((s) => s.toLowerCase() === p.service?.trim().toLowerCase()) ?? (p.service?.trim().slice(0, 60) || null);
   const campaign = campaigns.find((c) => c.id === p.campaign_id) ?? null;
   const phone = p.phone ? normalizePhone(p.phone) : null;
   const fields = {

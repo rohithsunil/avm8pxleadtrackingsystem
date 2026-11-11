@@ -3,8 +3,8 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { ChevronRightIcon, ListIcon, PlusIcon, SearchIcon, Table2Icon, UsersRoundIcon } from 'lucide-react';
 import { api, storage } from '@/lib/api.js';
 import LeadTable from '@/components/LeadTable.jsx';
-import { aed, isWaiting, timeAgo } from '@/lib/format.js';
-import { adLabel, CHANNEL_DOT } from '@/lib/leadFields.js';
+import { aed, count, isWaiting, timeAgo } from '@/lib/format.js';
+import { CHANNEL_DOT } from '@/lib/leadFields.js';
 import { useSession } from '@/session.jsx';
 import { ErrorAlert, LoadingBlock, PageHeader, StatusBadge } from '@/components/app.jsx';
 import { Frame, FramePanel } from '@/components/reui/frame';
@@ -62,7 +62,7 @@ export function LeadRow({ lead, followupDays }) {
         <p className={cn('num text-sm', lead.status === 'Won' ? 'font-semibold' : 'text-muted-foreground')}>{lead.amount ? aed(lead.amount) : ''}</p>
         <p className="flex items-center justify-end gap-1.5 text-xs text-muted-foreground">
           <span className={cn('size-1.5 rounded-full', CHANNEL_DOT[lead.channel])} />
-          {lead.channel} · {adLabel(lead)}
+          {lead.channel}
         </p>
       </div>
       <div className="flex w-[5.5rem] flex-col items-end gap-1">
@@ -80,14 +80,29 @@ export default function Leads() {
   const [params, setParams] = useSearchParams();
   const filter = params.get('filter') ?? 'All';
   const [search, setSearch] = useState(params.get('q') ?? '');
-  const [state, setState] = useState({ loading: true, leads: [], hasMore: false, error: '' });
+  const [state, setState] = useState({ loading: true, leads: [], hasMore: false, error: '', totals: null });
   const [view, setViewState] = useState(() => storage.get('avm:leads-view') ?? 'table');
   const setView = (v) => {
     setViewState(v);
     storage.set('avm:leads-view', v);
   };
-  const created = (lead) => setState((s) => ({ ...s, leads: [lead, ...s.leads] }));
-  const updated = (lead) => setState((s) => ({ ...s, leads: s.leads.map((l) => (l.id === lead.id ? lead : l)) }));
+  // After an edit in the table, refresh just the totals (one row, same filters).
+  async function refreshTotals() {
+    try {
+      const { totals } = await api(`/leads?${filterQuery({ limit: '1' })}`);
+      setState((s) => ({ ...s, totals }));
+    } catch {
+      /* totals are a nicety */
+    }
+  }
+  const created = (lead) => {
+    setState((s) => ({ ...s, leads: [lead, ...s.leads] }));
+    refreshTotals();
+  };
+  const updated = (lead) => {
+    setState((s) => ({ ...s, leads: s.leads.map((l) => (l.id === lead.id ? lead : l)) }));
+    refreshTotals();
+  };
 
   // Debounce typing, then keep the search in the URL so Back returns to it.
   useEffect(() => {
@@ -100,17 +115,22 @@ export default function Leads() {
     return () => clearTimeout(t);
   }, [search]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  async function load(offset = 0) {
-    const query = new URLSearchParams({ limit: '30', offset: String(offset) });
+  function filterQuery(extra) {
+    const query = new URLSearchParams(extra);
     const q = params.get('q');
     if (q) query.set('q', q);
     if (filter === 'Follow up') {
       query.set('followup', '1');
       query.set('days', String(followupDays));
     } else if (filter !== 'All') query.set('status', filter);
+    return query;
+  }
+
+  async function load(offset = 0) {
+    const query = filterQuery({ limit: '30', offset: String(offset) });
     try {
       const data = await api(`/leads?${query}`);
-      setState((s) => ({ loading: false, error: '', hasMore: data.hasMore, leads: offset ? [...s.leads, ...data.leads] : data.leads }));
+      setState((s) => ({ loading: false, error: '', hasMore: data.hasMore, totals: data.totals, leads: offset ? [...s.leads, ...data.leads] : data.leads }));
     } catch (err) {
       setState((s) => ({ ...s, loading: false, error: err.message }));
     }
@@ -178,6 +198,26 @@ export default function Leads() {
           </ToggleGroup>
         </div>
       </div>
+
+      {state.totals && state.totals.leads > 0 && (
+        <div className="mb-4 grid grid-cols-3 divide-x rounded-xl border bg-card">
+          <div className="px-4 py-3">
+            <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">Business won</p>
+            <p className="num font-display text-2xl text-success-foreground md:text-3xl">{aed(state.totals.won_value)}</p>
+            <p className="text-xs text-muted-foreground">{count(state.totals.won)} won lead{state.totals.won === 1 ? '' : 's'}</p>
+          </div>
+          <div className="px-4 py-3">
+            <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">Still in play</p>
+            <p className="num font-display text-2xl md:text-3xl">{aed(state.totals.open_value)}</p>
+            <p className="text-xs text-muted-foreground">New and quoted ticket value</p>
+          </div>
+          <div className="px-4 py-3">
+            <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">Leads</p>
+            <p className="num font-display text-2xl md:text-3xl">{count(state.totals.leads)}</p>
+            <p className="text-xs text-muted-foreground">{filtered ? 'Matching this filter' : 'All time'}</p>
+          </div>
+        </div>
+      )}
 
       <ErrorAlert className="mb-4">{state.error}</ErrorAlert>
 
