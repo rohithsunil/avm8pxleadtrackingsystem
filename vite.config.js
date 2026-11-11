@@ -1,8 +1,11 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
-import 'dotenv/config';
+import dotenv from 'dotenv';
 import { fileURLToPath } from 'node:url';
+
+// .env.local is written by `neon deploy`; .env holds PINs and other local values.
+dotenv.config({ path: ['.env.local', '.env'], quiet: true });
 
 // In `npm run dev`, serve /api/* from the same handler Netlify runs,
 // so local development needs no Netlify CLI.

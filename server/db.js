@@ -1,25 +1,31 @@
-import pg from 'pg';
+// Postgres on Neon, using Neon's serverless driver (recommended for Netlify):
+// - one-shot queries go over HTTP, which suits short-lived functions;
+// - the one multi-statement transaction uses a WebSocket Pool.
+// DATABASE_URL is Neon's pooled connection string (written by `neon deploy`).
+import { neon, Pool, types } from '@neondatabase/serverless';
 
 // Return numbers as JS numbers and dates as 'YYYY-MM-DD' strings.
-pg.types.setTypeParser(1700, (v) => (v === null ? null : parseFloat(v))); // numeric
-pg.types.setTypeParser(20, (v) => (v === null ? null : parseInt(v, 10))); // bigint (count)
-pg.types.setTypeParser(1082, (v) => v); // date
+const PARSERS = {
+  1700: (v) => parseFloat(v), // numeric
+  20: (v) => parseInt(v, 10), // bigint (count)
+  1082: (v) => v, // date
+};
+const customTypes = {
+  getTypeParser: (oid, format) => PARSERS[oid] ?? types.getTypeParser(oid, format),
+};
 
-let pool;
-
-function getPool() {
-  if (!pool) {
-    if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is not set');
-    // Kept small: each warm function instance holds at most two connections.
-    // Use Neon's pooled connection string (host contains "-pooler").
-    pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 2, idleTimeoutMillis: 10_000 });
-  }
-  return pool;
+function connectionString() {
+  const url = process.env.DATABASE_URL;
+  if (!url) throw new Error('DATABASE_URL is not set');
+  return url;
 }
 
+let sql;
+
 export async function query(text, params = []) {
-  const result = await getPool().query(text, params);
-  return result.rows;
+  sql ??= neon(connectionString());
+  // The HTTP path reads `types` per query, not from neon()'s options.
+  return sql.query(text, params, { types: customTypes });
 }
 
 export async function one(text, params = []) {
@@ -28,7 +34,9 @@ export async function one(text, params = []) {
 }
 
 export async function transaction(fn) {
-  const client = await getPool().connect();
+  // A fresh pool per transaction: Netlify functions don't keep sockets warm.
+  const pool = new Pool({ connectionString: connectionString(), types: customTypes });
+  const client = await pool.connect();
   try {
     await client.query('BEGIN');
     const result = await fn((text, params = []) => client.query(text, params).then((r) => r.rows));
@@ -39,5 +47,6 @@ export async function transaction(fn) {
     throw err;
   } finally {
     client.release();
+    await pool.end();
   }
 }

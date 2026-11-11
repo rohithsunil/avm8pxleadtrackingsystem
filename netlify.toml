@@ -2,10 +2,12 @@
   command = "npm run build"
   publish = "dist"
 
+  [build.environment]
+    # Neon's serverless driver uses the built-in WebSocket from Node 22.
+    NODE_VERSION = "22"
+
 [functions]
   node_bundler = "esbuild"
-  # pg has an optional native add-on the bundler can't resolve; ship pg as-is.
-  external_node_modules = ["pg"]
 
 # Single-page app: let React Router handle every non-API path.
 [[redirects]]

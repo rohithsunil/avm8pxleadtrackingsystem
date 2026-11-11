@@ -11,17 +11,19 @@ Stack: React + Vite + Tailwind v4, UI from [ReUI](https://reui.io) and shadcn/ui
 
 ### 1. Database: Neon
 
-1. Sign up at [neon.tech](https://neon.tech) and create a project (pick the region closest to the UAE that Neon offers).
-2. On the project dashboard, click **Connect**, turn on **Connection pooling**, and copy the connection string. It looks like `postgresql://user:pass@ep-xxx-pooler.ap-southeast-1.aws.neon.tech/neondb?sslmode=require`.
-3. Create the tables from your computer:
+The repo is already linked to the Neon project `orange-tree-95839736` (branch `production`) through `neon.ts` and a local `.neon` file. The tables already exist there.
 
-   ```bash
-   npm install
-   echo 'DATABASE_URL=<paste the connection string>' > .env
-   npm run db:setup
-   ```
+To get the connection strings on a new machine:
 
-   Or paste the contents of `db/schema.sql` into Neon's **SQL Editor** and run it.
+```bash
+npm i -g neon@latest
+neon login                 # browser sign-in
+neon link --project-id orange-tree-95839736 --branch production
+neon env pull              # writes DATABASE_URL, DATABASE_URL_UNPOOLED and the rest to .env.local
+npm run db:setup           # creates any missing tables; safe to rerun
+```
+
+`.env.local` is git-ignored. The app reads the pooled `DATABASE_URL`; `db:setup` uses the direct `DATABASE_URL_UNPOOLED`, as Neon recommends for schema changes. Both go through Neon's serverless driver over HTTPS, so no open Postgres port is needed.
 
 ### 2. Code: GitHub
 
@@ -34,7 +36,7 @@ Push this folder to a private GitHub repository.
 
    | Variable | Value |
    | --- | --- |
-   | `DATABASE_URL` | The Neon pooled connection string |
+   | `DATABASE_URL` | The pooled connection string: `DATABASE_URL` from `.env.local` |
    | `STAFF_PIN` | Six digits for AVM staff |
    | `AGENCY_PIN` | Six different digits, for you only |
    | `SESSION_SECRET` | A random string of 32+ characters (run `openssl rand -hex 32`) |
@@ -55,14 +57,16 @@ Open **Ad data**, pick last week, and copy four numbers per campaign from Meta A
 
 ## Run locally
 
-Needs Node 20+ and a Postgres database (a free Neon branch works, or local Postgres).
+Needs Node 22+ and the Neon setup above.
 
 ```bash
 npm install
-cp .env.example .env    # fill in the values
-npm run db:setup
+neon env pull           # database values into .env.local
+cp .env.example .env    # PINs, session secret, Claude key
 npm run dev             # http://localhost:5173
 ```
+
+To try changes without touching production data, work on a Neon branch: `neon checkout dev --create` (it expires after 7 days, as set in `neon.ts`).
 
 `npm run dev` serves the API from the same code Netlify runs, so you don't need the Netlify CLI.
 
