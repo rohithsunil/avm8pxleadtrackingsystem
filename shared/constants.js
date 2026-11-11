@@ -3,6 +3,9 @@
 export const STATUSES = ['New', 'Quoted', 'Won', 'Lost'];
 export const SOURCES = ['Ad', 'Other'];
 
+// Every lead arrives through one of these.
+export const CHANNELS = ['WhatsApp', 'Instagram', 'Facebook', 'Phone call'];
+
 // Fixed on purpose: the diagnosis rules depend on two of these by name.
 export const LOST_REASONS = [
   'Price too high',

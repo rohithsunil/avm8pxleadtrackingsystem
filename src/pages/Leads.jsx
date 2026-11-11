@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { ChevronRightIcon, PlusIcon, SearchIcon, UsersRoundIcon } from 'lucide-react';
-import { api } from '@/lib/api.js';
+import { ChevronRightIcon, ListIcon, PlusIcon, SearchIcon, Table2Icon, UsersRoundIcon } from 'lucide-react';
+import { api, storage } from '@/lib/api.js';
+import LeadTable from '@/components/LeadTable.jsx';
 import { aed, isWaiting, timeAgo } from '@/lib/format.js';
+import { adLabel, CHANNEL_DOT } from '@/lib/leadFields.js';
 import { useSession } from '@/session.jsx';
 import { ErrorAlert, LoadingBlock, PageHeader, StatusBadge } from '@/components/app.jsx';
 import { Frame, FramePanel } from '@/components/reui/frame';
@@ -58,7 +60,10 @@ export function LeadRow({ lead, followupDays }) {
       </div>
       <div className="hidden w-32 text-right md:block">
         <p className="num text-sm font-semibold">{lead.status === 'Won' ? aed(lead.amount) : ''}</p>
-        <p className="text-xs text-muted-foreground">{lead.source === 'Ad' ? (lead.campaign_name ?? 'Ad') : 'Other'}</p>
+        <p className="flex items-center justify-end gap-1.5 text-xs text-muted-foreground">
+          <span className={cn('size-1.5 rounded-full', CHANNEL_DOT[lead.channel])} />
+          {lead.channel} · {adLabel(lead)}
+        </p>
       </div>
       <div className="flex w-[5.5rem] flex-col items-end gap-1">
         <StatusBadge status={lead.status} />
@@ -76,6 +81,13 @@ export default function Leads() {
   const filter = params.get('filter') ?? 'All';
   const [search, setSearch] = useState(params.get('q') ?? '');
   const [state, setState] = useState({ loading: true, leads: [], hasMore: false, error: '' });
+  const [view, setViewState] = useState(() => storage.get('avm:leads-view') ?? 'table');
+  const setView = (v) => {
+    setViewState(v);
+    storage.set('avm:leads-view', v);
+  };
+  const created = (lead) => setState((s) => ({ ...s, leads: [lead, ...s.leads] }));
+  const updated = (lead) => setState((s) => ({ ...s, leads: s.leads.map((l) => (l.id === lead.id ? lead : l)) }));
 
   // Debounce typing, then keep the search in the URL so Back returns to it.
   useEffect(() => {
@@ -124,13 +136,23 @@ export default function Leads() {
       <PageHeader
         eyebrow="Pipeline"
         title="Leads"
-        description="Newest first. Tap a lead to update it."
+        description="Newest first. Type straight into the table, or open a lead for more."
         action={
-          role === 'agency' && (
-            <Button className="h-10 rounded-xl px-4" nativeButton={false} render={<Link to="/log" />}>
-              <PlusIcon data-icon="inline-start" /> Log lead
-            </Button>
-          )
+          <div className="flex items-center gap-2">
+            <ToggleGroup value={[view]} onValueChange={(v) => v[0] && setView(v[0])} spacing={0} variant="outline" className="hidden md:flex" aria-label="View">
+              <ToggleGroupItem value="table" className="h-10 gap-1.5 bg-card px-3 aria-pressed:bg-foreground aria-pressed:text-background">
+                <Table2Icon /> Table
+              </ToggleGroupItem>
+              <ToggleGroupItem value="list" className="h-10 gap-1.5 bg-card px-3 aria-pressed:bg-foreground aria-pressed:text-background">
+                <ListIcon /> List
+              </ToggleGroupItem>
+            </ToggleGroup>
+            {role === 'agency' && (
+              <Button className="h-10 rounded-xl px-4 md:hidden" nativeButton={false} render={<Link to="/log" />}>
+                <PlusIcon data-icon="inline-start" /> Log lead
+              </Button>
+            )}
+          </div>
         }
       />
 
@@ -159,6 +181,20 @@ export default function Leads() {
 
       <ErrorAlert className="mb-4">{state.error}</ErrorAlert>
 
+      {!state.loading && view === 'table' && (
+        <div className="hidden md:block">
+          <LeadTable
+            leads={state.leads}
+            onCreated={created}
+            onUpdated={updated}
+            followupDays={followupDays}
+            hasMore={state.hasMore}
+            onLoadMore={() => load(state.leads.length)}
+          />
+        </div>
+      )}
+
+      <div className={cn(view === 'table' && 'md:hidden')}>
       {state.loading ? (
         <LoadingBlock rows={5} />
       ) : state.leads.length === 0 ? (
@@ -196,6 +232,7 @@ export default function Leads() {
           )}
         </Frame>
       )}
+      </div>
     </div>
   );
 }

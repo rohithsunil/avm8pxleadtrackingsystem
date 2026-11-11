@@ -29,6 +29,10 @@ CREATE TABLE IF NOT EXISTS leads (
   closed_at      TIMESTAMPTZ
 );
 
+-- Added later: the channel the lead came in on.
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS channel TEXT NOT NULL DEFAULT 'WhatsApp'
+  CHECK (channel IN ('WhatsApp', 'Instagram', 'Facebook', 'Phone call'));
+
 CREATE INDEX IF NOT EXISTS leads_created_at_idx ON leads (created_at DESC);
 CREATE INDEX IF NOT EXISTS leads_phone_idx ON leads (phone);
 

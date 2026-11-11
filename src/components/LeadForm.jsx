@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { ArrowUpRightIcon, HistoryIcon, SparklesIcon } from 'lucide-react';
 import { api, storage } from '@/lib/api.js';
 import { aed, shortDate } from '@/lib/format.js';
+import { adOptions, adValue, defaultAdValue, fromAdValue } from '@/lib/leadFields.js';
 import { useSession } from '@/session.jsx';
 import { ErrorAlert, StatusBadge } from '@/components/app.jsx';
 import { PhoneInput } from '@/components/reui/phone-input';
@@ -19,6 +20,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { cn } from '@/lib/utils';
 
 const HANDLER_KEY = 'avm:handled_by';
+const AD_KEY = 'avm:ad';
 
 // Phone-friendly control sizing used across the form.
 const CONTROL = 'h-11 rounded-xl text-base md:h-10 md:text-sm';
@@ -30,14 +32,16 @@ const STATUS_ON = {
   Lost: 'aria-pressed:border-destructive/40 aria-pressed:bg-destructive/10 aria-pressed:text-destructive-foreground',
 };
 
-function blankLead() {
+function blankLead(campaigns) {
+  const remembered = storage.get(AD_KEY);
+  const validAd = remembered && adOptions(campaigns).some((o) => o.value === remembered);
   return {
     customer_name: '',
     business_name: '',
     phone: '',
     service: '',
-    source: 'Ad',
-    campaign_id: '',
+    channel: 'WhatsApp',
+    ad: validAd ? remembered : defaultAdValue(campaigns),
     status: 'New',
     amount: '',
     lost_reason: '',
@@ -46,12 +50,12 @@ function blankLead() {
   };
 }
 
-function fromLead(lead) {
+function fromLead(lead, campaigns) {
   return {
-    ...blankLead(),
+    ...blankLead(campaigns),
     ...Object.fromEntries(Object.entries(lead).map(([k, v]) => [k, v ?? ''])),
     phone: lead.phone ? `+${lead.phone}` : '',
-    campaign_id: lead.campaign_id ? String(lead.campaign_id) : '',
+    ad: adValue(lead),
     amount: lead.amount ? String(lead.amount) : '',
   };
 }
@@ -62,8 +66,8 @@ function toPayload(form) {
     business_name: form.business_name,
     phone: form.phone,
     service: form.service,
-    source: form.source,
-    campaign_id: form.source === 'Ad' && form.campaign_id ? Number(form.campaign_id) : null,
+    channel: form.channel,
+    ...fromAdValue(form.ad),
     status: form.status,
     amount: form.status === 'Won' && form.amount !== '' ? Number(form.amount) : null,
     lost_reason: form.status === 'Lost' && form.lost_reason ? form.lost_reason : null,
@@ -194,7 +198,7 @@ function Segmented({ options, value, onChange, label, itemClass, columns }) {
 export default function LeadForm({ lead, onSaved, onCancel }) {
   const { options } = useSession();
   const isNew = !lead;
-  const [form, setForm] = useState(() => (lead ? fromLead(lead) : blankLead()));
+  const [form, setForm] = useState(() => (lead ? fromLead(lead, options.campaigns) : blankLead(options.campaigns)));
   const [errors, setErrors] = useState({});
   const [formError, setFormError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -203,7 +207,7 @@ export default function LeadForm({ lead, onSaved, onCancel }) {
   const checkedPhone = useRef('');
   const top = useRef(null);
 
-  const campaigns = options.campaigns.filter((c) => c.active || String(c.id) === form.campaign_id);
+  const ads = adOptions(options.campaigns, lead?.campaign_id);
 
   function update(patch) {
     setForm((f) => ({ ...f, ...patch }));
@@ -230,7 +234,9 @@ export default function LeadForm({ lead, onSaved, onCancel }) {
 
   function applyParsed(fields) {
     const patch = { ...fields };
-    if (patch.campaign_id) patch.campaign_id = String(patch.campaign_id);
+    if (patch.campaign_id) patch.ad = `c:${patch.campaign_id}`;
+    delete patch.campaign_id;
+    delete patch.source;
     if (patch.amount) patch.amount = String(patch.amount);
     if (patch.phone) patch.phone = `+${patch.phone}`;
     update(patch);
@@ -242,6 +248,9 @@ export default function LeadForm({ lead, onSaved, onCancel }) {
   useEffect(() => {
     if (form.handled_by) storage.set(HANDLER_KEY, form.handled_by);
   }, [form.handled_by]);
+  useEffect(() => {
+    if (isNew && form.ad) storage.set(AD_KEY, form.ad);
+  }, [isNew, form.ad]);
 
   async function save(e) {
     e.preventDefault();
@@ -252,8 +261,8 @@ export default function LeadForm({ lead, onSaved, onCancel }) {
         ? await api('/leads', { method: 'POST', body: toPayload(form) })
         : await api(`/leads/${lead.id}`, { method: 'PATCH', body: toPayload(form) });
       if (isNew) {
-        // Ready for the next one; keep who is logging and the source.
-        setForm({ ...blankLead(), source: form.source, campaign_id: form.campaign_id });
+        // Ready for the next one; keep who is logging, the channel and the ad.
+        setForm({ ...blankLead(options.campaigns), channel: form.channel, ad: form.ad });
         setRepeat(null);
         checkedPhone.current = '';
         top.current?.scrollIntoView({ behavior: 'smooth' });
@@ -290,7 +299,7 @@ export default function LeadForm({ lead, onSaved, onCancel }) {
         </div>
 
         <Field data-invalid={!!errors.phone}>
-          <FieldLabel htmlFor="phone">WhatsApp number</FieldLabel>
+          <FieldLabel htmlFor="phone">Phone number</FieldLabel>
           <PhoneInput
             id="phone"
             defaultCountry="AE"
@@ -321,24 +330,24 @@ export default function LeadForm({ lead, onSaved, onCancel }) {
         <FieldSeparator />
 
         <div className="grid gap-5 md:grid-cols-2">
-          <Field>
-            <FieldLabel>Came from</FieldLabel>
-            <Segmented label="Source" options={['Ad', 'Other']} value={form.source} onChange={set('source')} />
+          <Field data-invalid={!!errors.channel}>
+            <FieldLabel>Came in on</FieldLabel>
+            <div className={cn('rounded-xl', glow('channel'))}>
+              <Segmented label="Channel" options={options.channels} value={form.channel} onChange={set('channel')} itemClass={() => 'px-1 text-[0.82rem]'} />
+            </div>
+            <FieldError>{errors.channel}</FieldError>
           </Field>
-          {form.source === 'Ad' && campaigns.length > 0 && (
-            <Field data-invalid={!!errors.campaign_id}>
-              <FieldLabel htmlFor="campaign">Which ad</FieldLabel>
-              <NativeSelect id="campaign" value={form.campaign_id} onChange={set('campaign_id')} aria-invalid={!!errors.campaign_id} className={cn('w-full [&_select]:h-11 [&_select]:rounded-xl [&_select]:text-base md:[&_select]:h-10 md:[&_select]:text-sm', glow('campaign_id'))}>
-                <NativeSelectOption value="">Choose the campaign…</NativeSelectOption>
-                {campaigns.map((c) => (
-                  <NativeSelectOption key={c.id} value={String(c.id)}>
-                    {c.name}
-                  </NativeSelectOption>
-                ))}
-              </NativeSelect>
-              <FieldError>{errors.campaign_id}</FieldError>
-            </Field>
-          )}
+          <Field data-invalid={!!errors.campaign_id}>
+            <FieldLabel htmlFor="ad">From an ad?</FieldLabel>
+            <NativeSelect id="ad" value={form.ad} onChange={set('ad')} aria-invalid={!!errors.campaign_id} className={cn('w-full [&_select]:h-11 [&_select]:rounded-xl [&_select]:text-base md:[&_select]:h-10 md:[&_select]:text-sm', glow('ad'))}>
+              {ads.map((o) => (
+                <NativeSelectOption key={o.value} value={o.value}>
+                  {o.label}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
+            <FieldError>{errors.campaign_id}</FieldError>
+          </Field>
         </div>
 
         <Field>

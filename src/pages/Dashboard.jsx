@@ -17,6 +17,7 @@ import { Switch } from '@/components/ui/switch';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { cn } from '@/lib/utils';
+import { CHANNEL_DOT } from '@/lib/leadFields.js';
 
 // ---------- Range controls ----------
 
@@ -430,6 +431,27 @@ export default function Dashboard() {
             <LostReasons rows={data.lostReasons} />
           </div>
           <Trend rows={data.trend} />
+          <DataTable
+            title="By channel"
+            description={includeOther ? 'All leads' : 'Ad leads only'}
+            rows={data.byChannel}
+            empty="No leads in this period."
+            columns={[
+              {
+                label: 'Channel',
+                render: (r) => (
+                  <span className="inline-flex items-center gap-2">
+                    <span className={cn('size-2 rounded-full', CHANNEL_DOT[r.name])} />
+                    {r.name}
+                  </span>
+                ),
+              },
+              { label: 'Leads', render: (r) => count(r.leads) },
+              { label: 'Sales', render: (r) => count(r.sales) },
+              { label: 'Won', render: (r) => pct(r.winShare) },
+              { label: 'Revenue', render: (r) => money(r.revenue) },
+            ]}
+          />
           <div className="grid gap-4 xl:grid-cols-[1.4fr_1fr]">
             <DataTable
               title="By campaign"

@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { query, one } from './db.js';
 import { HttpError, parseOrThrow } from './http.js';
-import { DEFAULT_THRESHOLDS, LOST_REASONS, STATUSES } from '../shared/constants.js';
+import { CHANNELS, DEFAULT_THRESHOLDS, LOST_REASONS, STATUSES } from '../shared/constants.js';
 
 export async function getSettings() {
   const rows = await query('SELECT key, value FROM settings');
@@ -27,6 +27,7 @@ export async function getOptions(role) {
     staff: settings.staff,
     statuses: STATUSES,
     lostReasons: LOST_REASONS,
+    channels: CHANNELS,
     campaigns,
     followupDays: settings.thresholds.followup_days,
     ...(role === 'agency' ? { thresholds: settings.thresholds } : {}),

@@ -5,6 +5,7 @@ import { createCampaign, getOptions, updateCampaign, updateSettings } from './se
 import { dashboard } from './dashboard.js';
 import { getWeek, saveWeek } from './adstats.js';
 import { editSummary, getSummary, parseLead, writeSummary } from './ai.js';
+import { keyStatus, removeKey, saveKey } from './aikey.js';
 
 const BOTH = ['staff', 'agency'];
 const AGENCY = ['agency'];
@@ -34,6 +35,9 @@ const routes = [
   ['GET', '/summary', AGENCY, async (req, { url }) => json(await getSummary(url.searchParams))],
   ['POST', '/summary', AGENCY, async (req) => json(await writeSummary(await readJson(req)))],
   ['PUT', '/summary', AGENCY, async (req) => json(await editSummary(await readJson(req)))],
+  ['GET', '/ai-key', AGENCY, async () => json(await keyStatus())],
+  ['PUT', '/ai-key', AGENCY, async (req) => json(await saveKey(await readJson(req)))],
+  ['DELETE', '/ai-key', AGENCY, async () => json(await removeKey())],
   ['PUT', '/settings', AGENCY, async (req) => json(await updateSettings(await readJson(req)))],
   ['POST', '/campaigns', AGENCY, async (req) => json(await createCampaign(await readJson(req)), 201)],
   ['PATCH', '/campaigns/:id', AGENCY, async (req, { id }) => json(await updateCampaign(id, await readJson(req)))],

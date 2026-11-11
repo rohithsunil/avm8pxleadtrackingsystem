@@ -40,7 +40,7 @@ Push this folder to a private GitHub repository.
    | `STAFF_PIN` | Six digits for AVM staff |
    | `AGENCY_PIN` | Six different digits, for you only |
    | `SESSION_SECRET` | A random string of 32+ characters (run `openssl rand -hex 32`) |
-   | `ANTHROPIC_API_KEY` | Your Claude API key (optional: without it, the AI buttons say "not set up yet" and everything else works) |
+   | `ANTHROPIC_API_KEY` | Optional. Easier: paste the key in the app under **Settings → Claude API key** |
 
 3. Deploy. Open the site, sign in with the agency PIN, and go to **Settings**.
 
@@ -48,8 +48,13 @@ Push this folder to a private GitHub repository.
 
 1. **Settings → Campaigns:** add each running ad with its pre-filled WhatsApp message (for example "Hi, I saw your ad for visiting cards"). Use the same message in the ad's WhatsApp button in Meta Ads Manager.
 2. **Settings → Services:** replace the sample list with what AVM actually sells.
-3. **Settings → Staff:** add the names of the people who answer WhatsApp.
-4. Send AVM the site link and the staff PIN. On their phones: open the link, then **Add to Home Screen**.
+3. **Settings → Staff:** add the names of the people who answer enquiries.
+4. **Settings → Claude API key:** paste your key. It's checked with Claude, stored encrypted, and can't be viewed or copied afterwards, only replaced or removed.
+5. Send AVM the site link and the staff PIN. On their phones: open the link, then **Add to Home Screen**.
+
+### Adding leads quickly
+
+On a laptop, **Leads** opens as a table. Type in the tinted top row (Tab moves across, Enter saves), click any cell of an existing lead to edit it, or copy rows from Excel or Google Sheets and paste them into the top row, then **Save all**. Columns in order: customer, business, number, channel, from ad, service, status, value (AED), lost because, handled by, note. On phones, use **Log lead**.
 
 ### Every week
 
@@ -74,6 +79,7 @@ To try changes without touching production data, work on a Neon branch: `neon ch
 
 - **Dates** are UAE time (Asia/Dubai). A lead counts in the period it was logged.
 - **Money** is in UAE dirhams (AED).
+- **Channels:** every lead came in on WhatsApp, Instagram, Facebook or a phone call. Separately, it's from a specific ad campaign, from an ad but not sure which, or not from an ad.
 - **Phone numbers** are stored with their country code (971501234567). Staff can type local UAE numbers (050 123 4567); other countries need their + code.
 - **Ad numbers** are weekly (Monday to Sunday). A date range includes every week that starts inside it, plus the week the range starts in.
 - **Sales and revenue** count leads logged in the period that are now Won, so a lead logged in October and won in November counts in October.

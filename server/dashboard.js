@@ -185,6 +185,18 @@ async function bySalesperson(from, to, all, followupDays) {
   ).then((rows) => rows.map((r) => ({ ...r, winShare: ratio(r.sales, r.leads) })));
 }
 
+async function byChannel(from, to, all) {
+  const f = leadFilter(from, to, all);
+  return query(
+    `SELECT l.channel AS name, count(*) AS leads,
+            count(*) FILTER (WHERE l.status = 'Won') AS sales,
+            COALESCE(sum(l.amount) FILTER (WHERE l.status = 'Won'), 0) AS revenue
+     FROM leads l WHERE ${f.sql}
+     GROUP BY l.channel ORDER BY leads DESC, revenue DESC`,
+    f.params,
+  ).then((rows) => rows.map((r) => ({ ...r, winShare: ratio(r.sales, r.leads) })));
+}
+
 // Numbers for one period, used by both the dashboard and the weekly summary.
 export async function periodReport(from, to, all = false) {
   const { thresholds: t } = await getSettings();
@@ -228,10 +240,11 @@ export async function dashboard(params) {
   }
   const all = params.get('all') === '1';
   const report = await periodReport(from, to, all);
-  const [trendRows, campaigns, people] = await Promise.all([
+  const [trendRows, campaigns, people, channels] = await Promise.all([
     trend(to, all),
     byCampaign(from, to),
     bySalesperson(from, to, all, report.thresholds.followup_days),
+    byChannel(from, to, all),
   ]);
-  return { ...report, trend: trendRows, byCampaign: campaigns, bySalesperson: people };
+  return { ...report, trend: trendRows, byCampaign: campaigns, bySalesperson: people, byChannel: channels };
 }

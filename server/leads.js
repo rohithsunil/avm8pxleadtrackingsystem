@@ -1,11 +1,11 @@
 import { z } from 'zod';
 import { query, one } from './db.js';
 import { HttpError, parseOrThrow } from './http.js';
-import { LOST_REASONS, SOURCES, STATUSES, isValidPhone, normalizePhone } from '../shared/constants.js';
+import { CHANNELS, LOST_REASONS, SOURCES, STATUSES, isValidPhone, normalizePhone } from '../shared/constants.js';
 
 const LEAD_COLUMNS = `
   l.id, l.created_at, l.updated_at, l.customer_name, l.business_name, l.phone, l.service,
-  l.source, l.campaign_id, c.name AS campaign_name, l.status, l.amount, l.lost_reason,
+  l.channel, l.source, l.campaign_id, c.name AS campaign_name, l.status, l.amount, l.lost_reason,
   l.handled_by, l.note, l.duplicate, l.quoted_at, l.closed_at`;
 
 const baseSchema = z.object({
@@ -16,6 +16,7 @@ const baseSchema = z.object({
     .transform(normalizePhone)
     .refine(isValidPhone, 'Enter a valid phone number'),
   service: z.string().trim().min(1, 'Pick a service').max(60),
+  channel: z.enum(CHANNELS, { message: 'Pick the channel' }).default('WhatsApp'),
   source: z.enum(SOURCES).default('Ad'),
   campaign_id: z.number().int().positive().nullable().default(null),
   status: z.enum(STATUSES).default('New'),
@@ -30,10 +31,6 @@ async function checkRules(lead) {
   const fields = {};
   if (lead.status === 'Won' && !(lead.amount > 0)) fields.amount = 'Enter the amount for a won lead';
   if (lead.status === 'Lost' && !lead.lost_reason) fields.lost_reason = 'Pick why it was lost';
-  if (lead.source === 'Ad' && !lead.campaign_id) {
-    const active = await one('SELECT count(*) AS n FROM campaigns WHERE active');
-    if (active.n > 0) fields.campaign_id = 'Pick the campaign';
-  }
   if (lead.campaign_id) {
     const exists = await one('SELECT 1 FROM campaigns WHERE id = $1', [lead.campaign_id]);
     if (!exists) fields.campaign_id = 'Unknown campaign';
@@ -106,13 +103,13 @@ export async function createLead(body) {
   const closed = lead.status === 'Won' || lead.status === 'Lost';
   const row = await one(
     `INSERT INTO leads (customer_name, business_name, phone, service, source, campaign_id, status,
-                        amount, lost_reason, handled_by, note, quoted_at, closed_at)
+                        amount, lost_reason, handled_by, note, quoted_at, closed_at, channel)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
-             CASE WHEN $12 THEN now() END, CASE WHEN $13 THEN now() END)
+             CASE WHEN $12 THEN now() END, CASE WHEN $13 THEN now() END, $14)
      RETURNING id`,
     [
       lead.customer_name, lead.business_name, lead.phone, lead.service, lead.source, lead.campaign_id,
-      lead.status, lead.amount, lead.lost_reason, lead.handled_by, lead.note, quoted, closed,
+      lead.status, lead.amount, lead.lost_reason, lead.handled_by, lead.note, quoted, closed, lead.channel,
     ],
   );
   return getLead(row.id);
@@ -133,6 +130,7 @@ export async function updateLead(id, body) {
     `UPDATE leads SET
        customer_name = $2, business_name = $3, phone = $4, service = $5, source = $6, campaign_id = $7,
        status = $8, amount = $9, lost_reason = $10, handled_by = $11, note = $12, duplicate = $13,
+       channel = $14,
        updated_at = now(),
        quoted_at = CASE WHEN $8 IN ('Quoted', 'Won') THEN COALESCE(quoted_at, now())
                         WHEN $8 = 'New' THEN NULL ELSE quoted_at END,
@@ -142,7 +140,7 @@ export async function updateLead(id, body) {
      WHERE id = $1`,
     [
       id, lead.customer_name, lead.business_name, lead.phone, lead.service, lead.source, lead.campaign_id,
-      lead.status, lead.amount, lead.lost_reason, lead.handled_by, lead.note, duplicate,
+      lead.status, lead.amount, lead.lost_reason, lead.handled_by, lead.note, duplicate, lead.channel,
     ],
   );
   return getLead(id);

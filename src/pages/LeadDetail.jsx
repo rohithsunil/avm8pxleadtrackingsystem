@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { ArrowLeftIcon, ClockAlertIcon, CopyXIcon, MessageCircleIcon, PencilIcon, PhoneIcon } from 'lucide-react';
 import { api } from '@/lib/api.js';
 import { aed, fullDate, isWaiting, phoneDisplay, timeAgo } from '@/lib/format.js';
+import { adLabel, CHANNEL_DOT } from '@/lib/leadFields.js';
 import { useSession } from '@/session.jsx';
 import LeadForm from '@/components/LeadForm.jsx';
 import { ErrorAlert, LoadingBlock, Section, StatusBadge, useConfirm } from '@/components/app.jsx';
@@ -232,7 +233,13 @@ export default function LeadDetail() {
               <dl className="divide-y text-[0.95rem]">
                 <Row label="Number">{phoneDisplay(lead.phone)}</Row>
                 <Row label="Service">{lead.service}</Row>
-                <Row label="Came from">{lead.source === 'Ad' ? lead.campaign_name || 'Ad' : 'Other'}</Row>
+                <Row label="Came in on">
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className={cn('size-2 rounded-full', CHANNEL_DOT[lead.channel])} />
+                    {lead.channel}
+                  </span>
+                </Row>
+                <Row label="From an ad">{adLabel(lead)}</Row>
                 {lead.status === 'Lost' && <Row label="Lost because">{lead.lost_reason}</Row>}
                 <Row label="Handled by">{lead.handled_by}</Row>
                 {lead.note && <Row label="Note">{lead.note}</Row>}

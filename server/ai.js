@@ -4,17 +4,24 @@ import { z } from 'zod';
 import { one } from './db.js';
 import { HttpError, isoDate, parseOrThrow } from './http.js';
 import { getOptions } from './settings.js';
+import { getApiKey } from './aikey.js';
 import { periodReport, addDays, mondayOf } from './dashboard.js';
-import { LOST_REASONS, STATUSES, isValidPhone, normalizePhone } from '../shared/constants.js';
+import { CHANNELS, LOST_REASONS, STATUSES, isValidPhone, normalizePhone } from '../shared/constants.js';
 
 // Claude Haiku 5.5: fast and cheap, which suits filling a form while someone waits.
 const MODEL = process.env.CLAUDE_MODEL || 'claude-haiku-5-5';
 
+// The key comes from Settings (encrypted in the database) or ANTHROPIC_API_KEY.
 let client;
-function claude() {
-  if (!process.env.ANTHROPIC_API_KEY) throw new HttpError(503, 'The AI features are not set up yet');
-  // No automatic retries: staff are waiting, and the form works without AI.
-  client ??= new Anthropic({ maxRetries: 0 });
+let clientKey;
+async function claude() {
+  const apiKey = await getApiKey();
+  if (!apiKey) throw new HttpError(503, 'The AI features are not set up yet. Add a Claude API key in Settings.');
+  if (!client || clientKey !== apiKey) {
+    // No automatic retries: staff are waiting, and the form works without AI.
+    client = new Anthropic({ apiKey, maxRetries: 0 });
+    clientKey = apiKey;
+  }
   return client;
 }
 
@@ -36,6 +43,7 @@ const ParsedLead = z.object({
   business_name: z.string().nullable(),
   phone: z.string().nullable(),
   service: z.string().nullable(),
+  channel: z.enum(CHANNELS).nullable(),
   campaign_id: z.number().int().nullable(),
   status: z.enum(STATUSES).nullable(),
   amount: z.number().nullable(),
@@ -50,6 +58,7 @@ Return only what the text states. Use null for anything it does not state; never
 - business_name: the customer's business, if one is named.
 - phone: the number as written, including any country code, if a phone number appears.
 - service: must be exactly one of the services listed, picking the closest match; null if none fits.
+- channel: how the customer reached AVM. "Phone call" if they called; "Instagram" for Instagram or IG DMs; "Facebook" for Facebook or Messenger; "WhatsApp" for WhatsApp or a pasted WhatsApp chat. null if unclear.
 - campaign_id: the id of the campaign whose pre-filled message appears in the text; null otherwise.
 - status: "Won" if the note says they paid, ordered or confirmed; "Quoted" if a price was sent; "Lost" if they declined; otherwise null.
 - amount: the amount in UAE dirhams (AED, dhs, dirham) for a won order as a plain number ("2.5k" is 2500); null if not won or not stated.
@@ -69,7 +78,7 @@ export async function parseLead(body, role) {
 
   let response;
   try {
-    response = await claude().messages.parse(
+    response = await (await claude()).messages.parse(
       {
         model: MODEL,
         max_tokens: 1024,
@@ -96,6 +105,7 @@ export async function parseLead(body, role) {
     business_name: p.business_name?.trim() || null,
     phone: phone && isValidPhone(phone) ? phone : null,
     service,
+    channel: p.channel,
     source: campaign ? 'Ad' : null,
     campaign_id: campaign?.id ?? null,
     status: p.status,
@@ -153,7 +163,7 @@ export async function writeSummary(body) {
 
   let response;
   try {
-    response = await claude().messages.create(
+    response = await (await claude()).messages.create(
       {
         model: MODEL,
         max_tokens: 2048,

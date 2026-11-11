@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { MegaphoneIcon, PencilIcon, PlusIcon, RotateCcwIcon, SquareIcon, XIcon } from 'lucide-react';
+import { CheckCircle2Icon, KeyRoundIcon, MegaphoneIcon, PencilIcon, PlusIcon, RotateCcwIcon, ShieldCheckIcon, SquareIcon, Trash2Icon, XIcon } from 'lucide-react';
 import { api } from '@/lib/api.js';
 import { useSession } from '@/session.jsx';
 import { ErrorAlert, PageHeader, Section, useConfirm } from '@/components/app.jsx';
@@ -254,6 +254,106 @@ function Thresholds({ thresholds }) {
   );
 }
 
+// ---- Claude API key: write-only ----
+
+function AiKey() {
+  const confirm = useConfirm();
+  const [status, setStatus] = useState(null);
+  const [draft, setDraft] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    api('/ai-key').then(setStatus, (err) => setError(err.message));
+  }, []);
+
+  async function save(e) {
+    e.preventDefault();
+    if (!draft.trim()) return setError('Paste the key first');
+    setBusy(true);
+    setError('');
+    try {
+      setStatus(await api('/ai-key', { method: 'PUT', body: { key: draft } }));
+      toast.success('Claude key saved and working');
+    } catch (err) {
+      setError(err.fields?.key || err.message);
+    } finally {
+      setDraft(''); // never keep the key in the page once it's sent
+      setBusy(false);
+    }
+  }
+
+  async function remove() {
+    if (!(await confirm({ title: 'Remove the Claude key?', description: 'Paste-to-fill and the weekly note stop working until a key is added again.', confirmLabel: 'Remove', destructive: true }))) return;
+    try {
+      setStatus(await api('/ai-key', { method: 'DELETE' }));
+      toast.success('Key removed');
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  // Block copying the field's contents (the browser already masks it).
+  const block = (e) => e.preventDefault();
+
+  return (
+    <Section title="Claude API key" description="Powers paste-to-fill and the weekly note. Once saved, the key can't be viewed or copied from here, only replaced or removed.">
+      <div className="space-y-4">
+        {status && (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-muted/40 px-4 py-3">
+            {status.configured ? (
+              <p className="flex items-center gap-2 text-sm">
+                <CheckCircle2Icon className="size-4 text-success" />
+                <span className="font-semibold">Connected</span>
+                <span className="num text-muted-foreground">· key ending ••••{status.last4}</span>
+                <span className="text-muted-foreground">· {status.source === 'settings' ? 'saved here' : 'from Netlify environment'}</span>
+              </p>
+            ) : (
+              <p className="flex items-center gap-2 text-sm text-muted-foreground">
+                <KeyRoundIcon className="size-4" /> No key yet. AI features are off.
+              </p>
+            )}
+            {status.source === 'settings' && (
+              <Button variant="ghost" size="sm" onClick={remove} className="text-muted-foreground hover:text-destructive">
+                <Trash2Icon data-icon="inline-start" /> Remove
+              </Button>
+            )}
+          </div>
+        )}
+        <form onSubmit={save} className="flex flex-col gap-2 sm:flex-row" autoComplete="off">
+          <InputGroup className="h-10 flex-1 rounded-xl">
+            <InputGroupAddon>
+              <KeyRoundIcon />
+            </InputGroupAddon>
+            <InputGroupInput
+              type="password"
+              name="claude-key"
+              autoComplete="off"
+              spellCheck={false}
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onCopy={block}
+              onCut={block}
+              onDragStart={block}
+              placeholder={status?.configured ? 'Paste a new key to replace it' : 'sk-ant-…'}
+              aria-label="Claude API key"
+              data-1p-ignore
+              data-lpignore="true"
+            />
+          </InputGroup>
+          <Button type="submit" disabled={busy} className="h-10 rounded-xl">
+            {busy ? <Spinner /> : <ShieldCheckIcon data-icon="inline-start" />} {busy ? 'Checking…' : 'Save and check'}
+          </Button>
+        </form>
+        <ErrorAlert>{error}</ErrorAlert>
+        <p className="text-xs text-muted-foreground">
+          Create one at console.anthropic.com → API keys. It's checked with Claude, encrypted, and only used by the server.
+        </p>
+      </div>
+    </Section>
+  );
+}
+
 export default function Settings() {
   const { options } = useSession();
   return (
@@ -264,6 +364,7 @@ export default function Settings() {
         <NameList title="Services" description="What AVM sells. Shown in the lead form." settingKey="services" items={options.services} placeholder="e.g. Vehicle wraps" />
         <NameList title="Staff" description="Who answers WhatsApp at AVM." settingKey="staff" items={options.staff} placeholder="e.g. Fatima" />
       </div>
+      <AiKey />
       <Thresholds thresholds={options.thresholds} />
     </div>
   );
