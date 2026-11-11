@@ -48,7 +48,7 @@ export default function Login() {
           <BuiltBy className="hidden md:flex" />
         </div>
         {/* Swoosh echo */}
-        <img src="/brand/avm-mark.png" alt="" aria-hidden="true" className="pointer-events-none absolute -right-16 -bottom-24 hidden h-[34rem] w-auto opacity-[0.07] md:block" />
+        <img src="/brand/avm-mark.svg" alt="" aria-hidden="true" className="pointer-events-none absolute -right-16 -bottom-24 hidden h-[34rem] w-auto opacity-[0.07] md:block" />
       </section>
 
       {/* PIN form */}

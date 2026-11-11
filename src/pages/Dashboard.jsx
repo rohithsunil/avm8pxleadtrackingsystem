@@ -117,7 +117,7 @@ function Verdict({ diagnosis }) {
         <p className="max-w-3xl font-display text-[1.75rem] leading-[1.15] md:text-[2.4rem]">{diagnosis.text}</p>
         <p className="mt-4 text-sm text-ink-muted md:text-base">{CHECK_HINT[diagnosis.check]}</p>
       </div>
-      <img src="/brand/avm-mark.png" alt="" aria-hidden="true" className="pointer-events-none absolute -right-6 -bottom-16 hidden h-64 opacity-[0.08] md:block" />
+      <img src="/brand/avm-mark.svg" alt="" aria-hidden="true" className="pointer-events-none absolute -right-6 -bottom-16 hidden h-64 opacity-[0.08] md:block" />
     </div>
   );
 }
