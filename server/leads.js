@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { query, one } from './db.js';
 import { HttpError, parseOrThrow } from './http.js';
-import { LOST_REASONS, SOURCES, STATUSES, normalizePhone } from '../shared/constants.js';
+import { LOST_REASONS, SOURCES, STATUSES, isValidPhone, normalizePhone } from '../shared/constants.js';
 
 const LEAD_COLUMNS = `
   l.id, l.created_at, l.updated_at, l.customer_name, l.business_name, l.phone, l.service,
@@ -14,7 +14,7 @@ const baseSchema = z.object({
   phone: z
     .string()
     .transform(normalizePhone)
-    .refine((p) => p.length >= 10 && p.length <= 13, 'Enter a 10-digit phone number'),
+    .refine(isValidPhone, 'Enter a valid phone number'),
   service: z.string().trim().min(1, 'Pick a service').max(60),
   source: z.enum(SOURCES).default('Ad'),
   campaign_id: z.number().int().positive().nullable().default(null),
@@ -90,7 +90,7 @@ export async function listLeads(params) {
 
 export async function findByPhone(rawPhone) {
   const phone = normalizePhone(rawPhone);
-  if (phone.length < 10) return { matches: [] };
+  if (!isValidPhone(phone)) return { matches: [] };
   const matches = await query(
     `SELECT ${LEAD_COLUMNS} FROM leads l LEFT JOIN campaigns c ON c.id = l.campaign_id
      WHERE l.phone = $1 AND NOT l.duplicate ORDER BY l.created_at DESC LIMIT 3`,

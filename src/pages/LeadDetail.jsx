@@ -1,16 +1,33 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { api } from '../lib/api.js';
-import { inr, isWaiting, timeAgo } from '../lib/format.js';
-import { useSession } from '../session.jsx';
-import LeadForm from '../components/LeadForm.jsx';
-import { Button, Card, ChoiceGroup, ErrorNote, Field, Input, Select, Spinner, StatusChip, useToast } from '../components/ui.jsx';
+import { toast } from 'sonner';
+import { ArrowLeftIcon, ClockAlertIcon, CopyXIcon, MessageCircleIcon, PencilIcon, PhoneIcon } from 'lucide-react';
+import { api } from '@/lib/api.js';
+import { aed, fullDate, isWaiting, phoneDisplay, timeAgo } from '@/lib/format.js';
+import { useSession } from '@/session.jsx';
+import LeadForm from '@/components/LeadForm.jsx';
+import { ErrorAlert, LoadingBlock, Section, StatusBadge, useConfirm } from '@/components/app.jsx';
+import { Alert, AlertAction, AlertDescription } from '@/components/reui/alert';
+import { Button } from '@/components/ui/button';
+import { Field, FieldLabel } from '@/components/ui/field';
+import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from '@/components/ui/input-group';
+import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { Spinner } from '@/components/ui/spinner';
+import { cn } from '@/lib/utils';
+
+const STATUS_ON = {
+  New: 'aria-pressed:border-foreground/30 aria-pressed:bg-foreground/[0.06] aria-pressed:text-foreground',
+  Quoted: 'aria-pressed:border-warning/40 aria-pressed:bg-warning/10 aria-pressed:text-warning-foreground',
+  Won: 'aria-pressed:border-success/40 aria-pressed:bg-success/10 aria-pressed:text-success-foreground',
+  Lost: 'aria-pressed:border-destructive/40 aria-pressed:bg-destructive/10 aria-pressed:text-destructive-foreground',
+};
 
 function Row({ label, children }) {
   return (
-    <div className="flex justify-between gap-4 border-b border-line py-2.5 last:border-0">
-      <span className="text-muted">{label}</span>
-      <span className="text-right font-medium">{children}</span>
+    <div className="flex justify-between gap-4 py-3 first:pt-0 last:pb-0">
+      <dt className="text-muted-foreground">{label}</dt>
+      <dd className="text-right font-medium">{children}</dd>
     </div>
   );
 }
@@ -18,7 +35,6 @@ function Row({ label, children }) {
 // Big status buttons: New/Quoted save at once, Won/Lost ask for one more detail.
 function StatusUpdate({ lead, onSaved }) {
   const { options } = useSession();
-  const toast = useToast();
   const [pending, setPending] = useState(null); // 'Won' | 'Lost' while asking for details
   const [amount, setAmount] = useState('');
   const [reason, setReason] = useState('');
@@ -32,7 +48,7 @@ function StatusUpdate({ lead, onSaved }) {
       const updated = await api(`/leads/${lead.id}`, { method: 'PATCH', body: { status, ...extra } });
       setPending(null);
       onSaved(updated);
-      toast(`Marked as ${status}`);
+      toast.success(`Marked as ${status}`);
     } catch (err) {
       setError(err.fields?.amount || err.fields?.lost_reason || err.message);
     } finally {
@@ -41,9 +57,8 @@ function StatusUpdate({ lead, onSaved }) {
   }
 
   function pick(status) {
+    if (!status) return;
     setError('');
-    // Re-picking Won or Lost lets staff correct the amount or reason.
-    if (status === lead.status && !pending && status !== 'Won' && status !== 'Lost') return;
     if (status === 'Won') {
       setAmount(lead.amount ? String(lead.amount) : '');
       return setPending('Won');
@@ -52,42 +67,64 @@ function StatusUpdate({ lead, onSaved }) {
       setReason(lead.lost_reason ?? '');
       return setPending('Lost');
     }
-    save(status);
+    if (status !== lead.status) save(status);
+    else setPending(null);
   }
 
   return (
-    <Card className="space-y-3">
-      <p className="text-sm font-medium">Update status</p>
-      <ChoiceGroup ariaLabel="Status" options={options.statuses} value={pending ?? lead.status} onChange={pick} coloured />
-      {pending === 'Won' && (
-        <div className="flex items-end gap-2">
-          <Field label="Amount (₹)" className="flex-1">
-            <Input type="number" inputMode="decimal" min="0" value={amount} onChange={(e) => setAmount(e.target.value)} autoFocus />
-          </Field>
-          <Button busy={busy} onClick={() => save('Won', { amount: amount === '' ? null : Number(amount) })}>
-            Save
-          </Button>
-        </div>
-      )}
-      {pending === 'Lost' && (
-        <div className="flex items-end gap-2">
-          <Field label="Why was it lost?" className="flex-1">
-            <Select value={reason} onChange={(e) => setReason(e.target.value)} options={options.lostReasons} />
-          </Field>
-          <Button busy={busy} onClick={() => save('Lost', { lost_reason: reason || null })}>
-            Save
-          </Button>
-        </div>
-      )}
-      <ErrorNote>{error}</ErrorNote>
-    </Card>
+    <Section title="Update status" description="Won and Lost ask for one more detail.">
+      <div className="space-y-4">
+        <ToggleGroup value={[pending ?? lead.status]} onValueChange={(v) => pick(v[0] ?? pending ?? lead.status)} spacing={2} className="grid w-full grid-cols-4" aria-label="Status">
+          {options.statuses.map((s) => (
+            <ToggleGroupItem key={s} value={s} variant="outline" className={cn('h-12 w-full rounded-xl bg-card font-semibold', STATUS_ON[s])}>
+              {s}
+            </ToggleGroupItem>
+          ))}
+        </ToggleGroup>
+        {pending === 'Won' && (
+          <div className="flex animate-in items-end gap-2 fade-in slide-in-from-top-1">
+            <Field className="flex-1">
+              <FieldLabel htmlFor="won-amount">Order value</FieldLabel>
+              <InputGroup className="h-11 rounded-xl">
+                <InputGroupAddon>
+                  <InputGroupText className="font-semibold">AED</InputGroupText>
+                </InputGroupAddon>
+                <InputGroupInput id="won-amount" type="number" inputMode="decimal" min="0" value={amount} onChange={(e) => setAmount(e.target.value)} autoFocus className="num text-base" />
+              </InputGroup>
+            </Field>
+            <Button className="h-11 rounded-xl px-5" disabled={busy} onClick={() => save('Won', { amount: amount === '' ? null : Number(amount) })}>
+              {busy && <Spinner />} Save
+            </Button>
+          </div>
+        )}
+        {pending === 'Lost' && (
+          <div className="flex animate-in items-end gap-2 fade-in slide-in-from-top-1">
+            <Field className="flex-1">
+              <FieldLabel htmlFor="lost-reason">Why was it lost?</FieldLabel>
+              <NativeSelect id="lost-reason" value={reason} onChange={(e) => setReason(e.target.value)} className="w-full [&_select]:h-11 [&_select]:rounded-xl [&_select]:text-base">
+                <NativeSelectOption value="">Choose a reason…</NativeSelectOption>
+                {options.lostReasons.map((r) => (
+                  <NativeSelectOption key={r} value={r}>
+                    {r}
+                  </NativeSelectOption>
+                ))}
+              </NativeSelect>
+            </Field>
+            <Button className="h-11 rounded-xl px-5" disabled={busy} onClick={() => save('Lost', { lost_reason: reason || null })}>
+              {busy && <Spinner />} Save
+            </Button>
+          </div>
+        )}
+        <ErrorAlert>{error}</ErrorAlert>
+      </div>
+    </Section>
   );
 }
 
 export default function LeadDetail() {
   const { id } = useParams();
   const { options } = useSession();
-  const toast = useToast();
+  const confirm = useConfirm();
   const [lead, setLead] = useState(null);
   const [error, setError] = useState('');
   const [editing, setEditing] = useState(false);
@@ -97,99 +134,120 @@ export default function LeadDetail() {
   }, [id]);
 
   async function setDuplicate(duplicate) {
-    if (duplicate && !window.confirm('Mark this lead as a duplicate? It will be left out of all counts.')) return;
+    if (
+      duplicate &&
+      !(await confirm({
+        title: 'Mark as a duplicate?',
+        description: 'It will be left out of every count on the dashboard. You can undo this later.',
+        confirmLabel: 'Mark duplicate',
+        destructive: true,
+      }))
+    )
+      return;
     try {
       setLead(await api(`/leads/${id}`, { method: 'PATCH', body: { duplicate } }));
-      toast(duplicate ? 'Marked as duplicate' : 'Duplicate mark removed');
+      toast.success(duplicate ? 'Marked as duplicate' : 'Duplicate mark removed');
     } catch (err) {
       setError(err.message);
     }
   }
 
-  if (error && !lead) return <ErrorNote>{error}</ErrorNote>;
-  if (!lead) return <Spinner />;
-
-  const phone = lead.phone.length === 10 ? `91${lead.phone}` : lead.phone;
+  if (error && !lead) return <ErrorAlert>{error}</ErrorAlert>;
+  if (!lead) return <LoadingBlock rows={3} />;
 
   return (
-    <div className="space-y-4">
-      <Link to="/leads" className="inline-block text-sm font-medium text-accent">
-        ← All leads
-      </Link>
+    <div className="space-y-6">
+      <Button variant="ghost" className="-ml-2 h-9 rounded-lg px-2 text-muted-foreground" nativeButton={false} render={<Link to="/leads" />}>
+        <ArrowLeftIcon data-icon="inline-start" /> All leads
+      </Button>
 
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex flex-wrap items-end justify-between gap-4">
         <div className="min-w-0">
-          <h1 className="text-xl font-semibold">{lead.customer_name}</h1>
-          {lead.business_name && <p className="text-muted">{lead.business_name}</p>}
+          <div className="mb-2 flex items-center gap-2">
+            <StatusBadge status={lead.status} />
+            <span className="text-sm text-muted-foreground">Logged {timeAgo(lead.created_at)}</span>
+          </div>
+          <h1 className="font-display text-[2.5rem] leading-none md:text-5xl">{lead.customer_name}</h1>
+          {lead.business_name && <p className="mt-2 text-lg text-muted-foreground">{lead.business_name}</p>}
         </div>
-        <StatusChip status={lead.status} />
+        {lead.status === 'Won' && (
+          <div className="text-right">
+            <p className="text-xs font-semibold tracking-[0.14em] text-muted-foreground uppercase">Order value</p>
+            <p className="num font-display text-4xl">{aed(lead.amount)}</p>
+          </div>
+        )}
       </div>
 
       {lead.duplicate && (
-        <div className="flex items-center justify-between gap-3 rounded-xl bg-line/60 px-3 py-2 text-sm">
-          <span>Marked as a duplicate and left out of all counts.</span>
-          <button type="button" className="font-medium text-accent" onClick={() => setDuplicate(false)}>
-            Undo
-          </button>
-        </div>
+        <Alert>
+          <CopyXIcon />
+          <AlertDescription>Marked as a duplicate and left out of all counts.</AlertDescription>
+          <AlertAction>
+            <Button variant="outline" size="sm" onClick={() => setDuplicate(false)}>
+              Undo
+            </Button>
+          </AlertAction>
+        </Alert>
       )}
       {isWaiting(lead, options.followupDays) && (
-        <p className="rounded-xl bg-warn/10 px-3 py-2 text-sm text-warn">Still New after {timeAgo(lead.created_at).replace(' ago', '')}. Follow up.</p>
+        <Alert variant="warning">
+          <ClockAlertIcon />
+          <AlertDescription>Still New after {timeAgo(lead.created_at).replace(' ago', '')}. Follow up today.</AlertDescription>
+        </Alert>
       )}
 
       {editing ? (
-        <Card>
+        <Section title="Edit details">
           <LeadForm
             lead={lead}
             onSaved={(updated) => {
               setLead(updated);
               setEditing(false);
-              toast('Changes saved');
+              toast.success('Changes saved');
             }}
             onCancel={() => setEditing(false)}
           />
-        </Card>
+        </Section>
       ) : (
         <>
-          <StatusUpdate lead={lead} onSaved={setLead} />
-
-          <div className="flex gap-2">
-            <a href={`tel:+${phone}`} className="flex min-h-12 flex-1 items-center justify-center rounded-[10px] border border-line bg-card font-medium">
-              Call
-            </a>
-            <a
-              href={`https://wa.me/${phone}`}
-              target="_blank"
-              rel="noreferrer"
-              className="flex min-h-12 flex-1 items-center justify-center rounded-[10px] border border-line bg-card font-medium"
-            >
-              WhatsApp
-            </a>
-          </div>
-
-          <Card className="py-1.5">
-            <Row label="Phone">{lead.phone}</Row>
-            <Row label="Service">{lead.service}</Row>
-            <Row label="Source">{lead.source === 'Ad' ? lead.campaign_name || 'Ad' : 'Other'}</Row>
-            {lead.status === 'Won' && <Row label="Amount">{inr(lead.amount)}</Row>}
-            {lead.status === 'Lost' && <Row label="Lost because">{lead.lost_reason}</Row>}
-            <Row label="Handled by">{lead.handled_by}</Row>
-            {lead.note && <Row label="Note">{lead.note}</Row>}
-            <Row label="Logged">{timeAgo(lead.created_at)}</Row>
-          </Card>
-
-          <ErrorNote>{error}</ErrorNote>
-
-          <div className="flex items-center justify-between">
-            <Button variant="ghost" onClick={() => setEditing(true)}>
-              Edit details
+          <div className="grid grid-cols-2 gap-2">
+            <Button variant="outline" className="h-12 rounded-xl bg-card text-base" nativeButton={false} render={<a href={`tel:+${lead.phone}`} />}>
+              <PhoneIcon data-icon="inline-start" /> Call
             </Button>
-            {!lead.duplicate && (
-              <Button variant="danger" onClick={() => setDuplicate(true)} className="text-sm">
-                Mark as duplicate
-              </Button>
-            )}
+            <Button className="h-12 rounded-xl bg-[#1f9d55] text-base text-white hover:bg-[#1a8a4a]" nativeButton={false} render={<a href={`https://wa.me/${lead.phone}`} target="_blank" rel="noreferrer" />}>
+              <MessageCircleIcon data-icon="inline-start" /> WhatsApp
+            </Button>
           </div>
+
+          <div className="grid gap-4 md:grid-cols-[1.2fr_1fr]">
+            <StatusUpdate lead={lead} onSaved={setLead} />
+            <Section
+              title="Details"
+              action={
+                <Button variant="ghost" size="sm" onClick={() => setEditing(true)}>
+                  <PencilIcon data-icon="inline-start" /> Edit
+                </Button>
+              }
+            >
+              <dl className="divide-y text-[0.95rem]">
+                <Row label="Number">{phoneDisplay(lead.phone)}</Row>
+                <Row label="Service">{lead.service}</Row>
+                <Row label="Came from">{lead.source === 'Ad' ? lead.campaign_name || 'Ad' : 'Other'}</Row>
+                {lead.status === 'Lost' && <Row label="Lost because">{lead.lost_reason}</Row>}
+                <Row label="Handled by">{lead.handled_by}</Row>
+                {lead.note && <Row label="Note">{lead.note}</Row>}
+                <Row label="Logged">{fullDate(lead.created_at)}</Row>
+              </dl>
+            </Section>
+          </div>
+
+          <ErrorAlert>{error}</ErrorAlert>
+
+          {!lead.duplicate && (
+            <Button variant="ghost" className="h-10 rounded-xl text-muted-foreground hover:text-destructive" onClick={() => setDuplicate(true)}>
+              <CopyXIcon data-icon="inline-start" /> Mark as duplicate
+            </Button>
+          )}
         </>
       )}
     </div>

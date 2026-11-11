@@ -24,10 +24,18 @@ export const DEFAULT_THRESHOLDS = {
   min_leads: 5, // below this, the diagnosis says there is not enough data
 };
 
-// Indian mobile numbers: keep the last 10 digits.
+// Phones are stored as international digits without the plus: 971501234567.
+// Local UAE formats (050 123 4567, 50 123 4567, 04 123 4567) get the 971 code;
+// anything else is taken as already including its country code.
 export function normalizePhone(raw) {
-  const digits = String(raw ?? '').replace(/\D/g, '');
-  if (digits.length === 12 && digits.startsWith('91')) return digits.slice(2);
-  if (digits.length === 11 && digits.startsWith('0')) return digits.slice(1);
+  let digits = String(raw ?? '').replace(/\D/g, '');
+  if (digits.startsWith('00')) digits = digits.slice(2);
+  if (/^0[1-9]\d{7,8}$/.test(digits)) return `971${digits.slice(1)}`;
+  if (/^5\d{8}$/.test(digits)) return `971${digits}`;
   return digits;
 }
+
+export const isValidPhone = (digits) => digits.length >= 10 && digits.length <= 15;
+
+export const TIME_ZONE = 'Asia/Dubai';
+export const CURRENCY = 'AED';

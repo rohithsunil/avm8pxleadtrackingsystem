@@ -5,13 +5,13 @@ AVM staff log every WhatsApp lead from their phone, and the agency sees what the
 - **Staff** (staff PIN): log a lead, paste a WhatsApp message to fill the form, update a lead's status.
 - **Agency** (agency PIN): everything staff can do, plus the dashboard, weekly ad numbers, the Claude-written weekly summary and settings.
 
-Stack: React + Vite + Tailwind, one Netlify Function (`/api/*`), Postgres on Neon, Claude Haiku 5.5 for the two AI features. Everything runs on free plans; the only cost is Claude API usage.
+Stack: React + Vite + Tailwind v4, UI from [ReUI](https://reui.io) and shadcn/ui (Base UI, base-nova style), one Netlify Function (`/api/*`), Postgres on Neon, Claude Haiku 5.5 for the two AI features. Money is in AED and dates are Dubai time. Everything runs on free plans; the only cost is Claude API usage.
 
 ## Deploy (about 15 minutes)
 
 ### 1. Database: Neon
 
-1. Sign up at [neon.tech](https://neon.tech) and create a project (pick the Singapore or Mumbai region if offered).
+1. Sign up at [neon.tech](https://neon.tech) and create a project (pick the region closest to the UAE that Neon offers).
 2. On the project dashboard, click **Connect**, turn on **Connection pooling**, and copy the connection string. It looks like `postgresql://user:pass@ep-xxx-pooler.ap-southeast-1.aws.neon.tech/neondb?sslmode=require`.
 3. Create the tables from your computer:
 
@@ -51,7 +51,7 @@ Push this folder to a private GitHub repository.
 
 ### Every week
 
-Open **Ad data**, pick last week, and copy four numbers per campaign from Meta Ads Manager: amount spent, impressions, link clicks, and WhatsApp conversations started. Then open the dashboard and press **Write summary** to get a note to send AVM.
+Open **Ad data**, pick last week, and copy four numbers per campaign from Meta Ads Manager: amount spent (AED), impressions, link clicks, and messaging conversations started. Then open the dashboard and press **Write summary** to get a note to send AVM.
 
 ## Run locally
 
@@ -68,7 +68,9 @@ npm run dev             # http://localhost:5173
 
 ## How the numbers work
 
-- **Dates** are Indian Standard Time. A lead counts in the period it was logged.
+- **Dates** are UAE time (Asia/Dubai). A lead counts in the period it was logged.
+- **Money** is in UAE dirhams (AED).
+- **Phone numbers** are stored with their country code (971501234567). Staff can type local UAE numbers (050 123 4567); other countries need their + code.
 - **Ad numbers** are weekly (Monday to Sunday). A date range includes every week that starts inside it, plus the week the range starts in.
 - **Sales and revenue** count leads logged in the period that are now Won, so a lead logged in October and won in November counts in October.
 - **The funnel and the diagnosis** use ad leads only. "Include non-ad leads" changes the headline numbers and breakdowns.
@@ -83,7 +85,17 @@ netlify/functions/api.js Netlify entry point for /api/*
 server/                  API: auth, leads, dashboard maths, ad data, Claude features
 shared/constants.js      Statuses, lost reasons, default thresholds (used by both sides)
 src/                     React app: pages/, components/, lib/
+src/components/ui/       shadcn/ui components (copied in, owned by this repo)
+src/components/reui/     ReUI components (copied in, owned by this repo)
+public/brand/            AVM and 8px Studio logos
 ```
+
+## Design
+
+- **Type:** Urbanist for the interface, Instrument Serif for headlines and big numbers. Both are self-hosted through Fontsource.
+- **Colour:** paper-white canvas, ink-black actions, and AVM's CMYK colours only where they carry meaning (brand marks, the revenue line, focus rings). Tokens are in `src/index.css`.
+- **Components:** add more with `npx shadcn@latest add @reui/<name>` (ReUI) or `npx shadcn@latest add <name>` (shadcn). ReUI's page blocks need a paid licence; its components and examples are free.
+- `src/components/reui/date-selector.tsx` has one local change, marked "AVM change", to hide the operator row when it is fixed.
 
 ## Security notes
 

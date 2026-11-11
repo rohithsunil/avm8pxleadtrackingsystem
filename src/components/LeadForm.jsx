@@ -1,11 +1,34 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { api, storage } from '../lib/api.js';
-import { shortDate } from '../lib/format.js';
-import { useSession } from '../session.jsx';
-import { Button, ChoiceGroup, ErrorNote, Field, Input, Select, StatusChip, cx, inputClass } from './ui.jsx';
+import { toast } from 'sonner';
+import { ArrowUpRightIcon, HistoryIcon, SparklesIcon } from 'lucide-react';
+import { api, storage } from '@/lib/api.js';
+import { aed, shortDate } from '@/lib/format.js';
+import { useSession } from '@/session.jsx';
+import { ErrorAlert, StatusBadge } from '@/components/app.jsx';
+import { PhoneInput } from '@/components/reui/phone-input';
+import { Alert, AlertDescription, AlertTitle } from '@/components/reui/alert';
+import { Button } from '@/components/ui/button';
+import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel, FieldSeparator } from '@/components/ui/field';
+import { Input } from '@/components/ui/input';
+import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from '@/components/ui/input-group';
+import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
+import { Textarea } from '@/components/ui/textarea';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { Spinner } from '@/components/ui/spinner';
+import { cn } from '@/lib/utils';
 
 const HANDLER_KEY = 'avm:handled_by';
+
+// Phone-friendly control sizing used across the form.
+const CONTROL = 'h-11 rounded-xl text-base md:h-10 md:text-sm';
+
+const STATUS_ON = {
+  New: 'aria-pressed:border-foreground/30 aria-pressed:bg-foreground/[0.06] aria-pressed:text-foreground',
+  Quoted: 'aria-pressed:border-warning/40 aria-pressed:bg-warning/10 aria-pressed:text-warning-foreground',
+  Won: 'aria-pressed:border-success/40 aria-pressed:bg-success/10 aria-pressed:text-success-foreground',
+  Lost: 'aria-pressed:border-destructive/40 aria-pressed:bg-destructive/10 aria-pressed:text-destructive-foreground',
+};
 
 function blankLead() {
   return {
@@ -27,6 +50,7 @@ function fromLead(lead) {
   return {
     ...blankLead(),
     ...Object.fromEntries(Object.entries(lead).map(([k, v]) => [k, v ?? ''])),
+    phone: lead.phone ? `+${lead.phone}` : '',
     campaign_id: lead.campaign_id ? String(lead.campaign_id) : '',
     amount: lead.amount ? String(lead.amount) : '',
   };
@@ -48,7 +72,7 @@ function toPayload(form) {
   };
 }
 
-// ---- Paste to log ----
+// ---- Paste to log (Claude) ----
 
 function PasteBox({ onFill }) {
   const [text, setText] = useState('');
@@ -68,6 +92,7 @@ function PasteBox({ onFill }) {
       else {
         onFill(fields);
         setText('');
+        toast.success(`Filled ${found} field${found === 1 ? '' : 's'}. Check them, then save.`);
       }
     } catch (err) {
       setMessage(err.name === 'AbortError' ? 'That took too long. Fill the form by hand.' : err.message);
@@ -78,23 +103,26 @@ function PasteBox({ onFill }) {
   }
 
   return (
-    <div className="rounded-xl border border-dashed border-accent/40 bg-accent/[0.03] p-3">
-      <label htmlFor="paste" className="mb-1.5 block text-sm font-medium">
-        Paste the customer's message or type a quick note
-      </label>
-      <textarea
+    <div className="relative overflow-hidden rounded-2xl bg-ink p-4 text-ink-foreground md:p-5">
+      <div className="mb-3 flex items-center gap-2">
+        <SparklesIcon className="size-4 text-brand-yellow" />
+        <p className="text-sm font-semibold">Paste to fill</p>
+        <span className="text-xs text-ink-muted">· Claude reads it for you</span>
+      </div>
+      <Textarea
         id="paste"
         rows={2}
         value={text}
         onChange={(e) => setText(e.target.value)}
-        placeholder="Ravi, Sri Sai Traders, 1000 visiting cards, 2500 paid"
-        className={cx(inputClass, 'min-h-20 py-2.5')}
+        placeholder="Paste the WhatsApp message, or type: Ahmed, Al Noor Trading, 500 business cards, paid 750"
+        className="min-h-20 rounded-xl border-ink-line bg-white/5 text-base text-ink-foreground placeholder:text-ink-muted focus-visible:border-brand-cyan md:text-sm"
       />
-      <div className="mt-2 flex items-center gap-3">
-        <Button variant="secondary" busy={busy} onClick={fill} className="min-h-10 shrink-0 text-sm">
+      <div className="mt-3 flex items-center gap-3">
+        <Button onClick={fill} disabled={busy} className="h-10 rounded-xl bg-ink-foreground px-4 text-ink hover:bg-white">
+          {busy ? <Spinner /> : <SparklesIcon data-icon="inline-start" />}
           Fill form
         </Button>
-        {message && <span className="text-sm text-muted">{message}</span>}
+        {message && <span className="text-sm text-ink-muted">{message}</span>}
       </div>
     </div>
   );
@@ -104,23 +132,62 @@ function PasteBox({ onFill }) {
 
 function RepeatNotice({ matches, onContinue }) {
   const first = matches[0];
+  const ref = useRef(null);
+  // Bring it into view: after a paste-fill it can appear below the fold,
+  // and Save stays disabled until staff answer it.
+  useEffect(() => {
+    ref.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, []);
   return (
-    <div className="rounded-xl border border-warn/40 bg-warn/5 p-3 text-sm">
-      <p className="font-medium">This number was logged before</p>
-      <p className="mt-1 text-muted">
-        {first.customer_name}
-        {first.business_name && `, ${first.business_name}`} · {first.service} · {shortDate(first.created_at)}{' '}
-        <StatusChip status={first.status} />
-      </p>
-      <div className="mt-3 flex flex-wrap gap-2">
-        <Link to={`/leads/${first.id}`} className="inline-flex min-h-10 items-center rounded-[10px] border border-line bg-card px-3 font-medium">
-          Same enquiry: open it
-        </Link>
-        <Button variant="secondary" onClick={onContinue} className="min-h-10 text-sm">
-          New order: continue
-        </Button>
-      </div>
-    </div>
+    <Alert variant="warning" ref={ref}>
+      <HistoryIcon />
+      <AlertTitle>This number was logged before</AlertTitle>
+      <AlertDescription>
+        <div className="mt-1 flex flex-wrap items-center gap-2 text-foreground">
+          <span className="font-medium">{first.customer_name}</span>
+          <span className="text-muted-foreground">
+            {first.service} · {shortDate(first.created_at)}
+            {first.status === 'Won' && ` · ${aed(first.amount)}`}
+          </span>
+          <StatusBadge status={first.status} />
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Button variant="outline" className="h-10 rounded-xl" nativeButton={false} render={<Link to={`/leads/${first.id}`} />}>
+            Same enquiry: open it <ArrowUpRightIcon data-icon="inline-end" />
+          </Button>
+          <Button variant="outline" className="h-10 rounded-xl" onClick={onContinue}>
+            New order: continue
+          </Button>
+        </div>
+      </AlertDescription>
+    </Alert>
+  );
+}
+
+function Segmented({ options, value, onChange, label, itemClass, columns }) {
+  return (
+    <ToggleGroup
+      aria-label={label}
+      value={value ? [value] : []}
+      onValueChange={(v) => v.length && onChange(v[0])}
+      spacing={2}
+      className="grid w-full"
+      style={{ gridTemplateColumns: `repeat(${columns ?? options.length}, minmax(0, 1fr))` }}
+    >
+      {options.map((o) => (
+        <ToggleGroupItem
+          key={o}
+          value={o}
+          variant="outline"
+          className={cn(
+            'h-11 w-full rounded-xl border bg-card text-[0.9rem] font-semibold aria-pressed:border-foreground aria-pressed:bg-foreground aria-pressed:text-background md:h-10',
+            itemClass?.(o),
+          )}
+        >
+          {o}
+        </ToggleGroupItem>
+      ))}
+    </ToggleGroup>
   );
 }
 
@@ -137,7 +204,6 @@ export default function LeadForm({ lead, onSaved, onCancel }) {
   const top = useRef(null);
 
   const campaigns = options.campaigns.filter((c) => c.active || String(c.id) === form.campaign_id);
-  const set = (key) => (e) => update({ [key]: e?.target ? e.target.value : e });
 
   function update(patch) {
     setForm((f) => ({ ...f, ...patch }));
@@ -147,10 +213,11 @@ export default function LeadForm({ lead, onSaved, onCancel }) {
       return next;
     });
   }
+  const set = (key) => (e) => update({ [key]: e?.target ? e.target.value : e });
 
   async function checkPhone(phone) {
     if (!isNew) return;
-    const digits = phone.replace(/\D/g, '');
+    const digits = String(phone ?? '').replace(/\D/g, '');
     if (digits.length < 10 || digits === checkedPhone.current) return;
     checkedPhone.current = digits;
     try {
@@ -165,9 +232,10 @@ export default function LeadForm({ lead, onSaved, onCancel }) {
     const patch = { ...fields };
     if (patch.campaign_id) patch.campaign_id = String(patch.campaign_id);
     if (patch.amount) patch.amount = String(patch.amount);
+    if (patch.phone) patch.phone = `+${patch.phone}`;
     update(patch);
     setHighlight(Object.fromEntries(Object.keys(patch).map((k) => [k, true])));
-    setTimeout(() => setHighlight({}), 1600);
+    setTimeout(() => setHighlight({}), 1800);
     if (patch.phone) checkPhone(patch.phone);
   }
 
@@ -199,104 +267,172 @@ export default function LeadForm({ lead, onSaved, onCancel }) {
     }
   }
 
-  const hl = (k) => highlight[k];
+  const glow = (k) => highlight[k] && 'ring-4 ring-brand-cyan/25 transition-shadow duration-700';
 
   return (
-    <form onSubmit={save} className="space-y-4" noValidate>
-      <div ref={top} />
+    <form onSubmit={save} noValidate className="space-y-6">
+      <div ref={top} className="scroll-mt-24" />
       {isNew && <PasteBox onFill={applyParsed} />}
 
-      <Field label="Customer name" error={errors.customer_name} highlight={hl('customer_name')}>
-        <Input value={form.customer_name} onChange={set('customer_name')} autoComplete="off" error={errors.customer_name} />
-      </Field>
+      <FieldGroup className="gap-5">
+        <div className="grid gap-5 md:grid-cols-2">
+          <Field data-invalid={!!errors.customer_name}>
+            <FieldLabel htmlFor="customer_name">Customer name</FieldLabel>
+            <Input id="customer_name" value={form.customer_name} onChange={set('customer_name')} autoComplete="off" aria-invalid={!!errors.customer_name} className={cn(CONTROL, glow('customer_name'))} />
+            <FieldError>{errors.customer_name}</FieldError>
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="business_name">
+              Business <span className="font-normal text-muted-foreground">(optional)</span>
+            </FieldLabel>
+            <Input id="business_name" value={form.business_name} onChange={set('business_name')} autoComplete="off" className={cn(CONTROL, glow('business_name'))} />
+          </Field>
+        </div>
 
-      <Field label="Business name" optional error={errors.business_name} highlight={hl('business_name')}>
-        <Input value={form.business_name} onChange={set('business_name')} autoComplete="off" />
-      </Field>
-
-      <Field label="Phone" error={errors.phone} highlight={hl('phone')}>
-        <Input
-          type="tel"
-          inputMode="numeric"
-          value={form.phone}
-          onChange={set('phone')}
-          onBlur={(e) => checkPhone(e.target.value)}
-          placeholder="10-digit mobile number"
-          error={errors.phone}
-        />
-      </Field>
-      {repeat && <RepeatNotice matches={repeat} onContinue={() => setRepeat(null)} />}
-
-      <Field label="Service" error={errors.service} highlight={hl('service')}>
-        <Select value={form.service} onChange={set('service')} options={options.services} error={errors.service} placeholder="Choose a service…" />
-      </Field>
-
-      <Field label="Source" group>
-        <ChoiceGroup ariaLabel="Source" options={['Ad', 'Other']} value={form.source} onChange={set('source')} />
-      </Field>
-
-      {form.source === 'Ad' && campaigns.length > 0 && (
-        <Field label="Campaign" error={errors.campaign_id} highlight={hl('campaign_id')}>
-          <Select
-            value={form.campaign_id}
-            onChange={set('campaign_id')}
-            options={campaigns.map((c) => ({ value: String(c.id), label: c.name }))}
-            error={errors.campaign_id}
-            placeholder="Which ad?"
+        <Field data-invalid={!!errors.phone}>
+          <FieldLabel htmlFor="phone">WhatsApp number</FieldLabel>
+          <PhoneInput
+            id="phone"
+            defaultCountry="AE"
+            value={form.phone}
+            onChange={(v) => update({ phone: v })}
+            onBlur={() => checkPhone(form.phone)}
+            aria-invalid={!!errors.phone}
+            variant="lg"
+            className={cn('[&_button]:h-11 [&_button]:rounded-s-xl [&_input]:h-11 [&_input]:rounded-e-xl [&_input]:text-base md:[&_button]:h-10 md:[&_input]:h-10 md:[&_input]:text-sm', glow('phone'))}
           />
+          <FieldError>{errors.phone}</FieldError>
         </Field>
-      )}
+        {repeat && <RepeatNotice matches={repeat} onContinue={() => setRepeat(null)} />}
 
-      <Field label="Status" group highlight={hl('status')}>
-        <ChoiceGroup ariaLabel="Status" options={options.statuses} value={form.status} onChange={set('status')} coloured />
-      </Field>
-
-      {form.status === 'Won' && (
-        <Field label="Amount (₹)" error={errors.amount} highlight={hl('amount')}>
-          <Input type="number" inputMode="decimal" min="0" value={form.amount} onChange={set('amount')} placeholder="0" error={errors.amount} />
+        <Field data-invalid={!!errors.service}>
+          <FieldLabel htmlFor="service">Service</FieldLabel>
+          <NativeSelect id="service" value={form.service} onChange={set('service')} aria-invalid={!!errors.service} className={cn('w-full [&_select]:h-11 [&_select]:rounded-xl [&_select]:text-base md:[&_select]:h-10 md:[&_select]:text-sm', glow('service'))}>
+            <NativeSelectOption value="">Choose a service…</NativeSelectOption>
+            {options.services.map((s) => (
+              <NativeSelectOption key={s} value={s}>
+                {s}
+              </NativeSelectOption>
+            ))}
+          </NativeSelect>
+          <FieldError>{errors.service}</FieldError>
         </Field>
-      )}
 
-      {form.status === 'Lost' && (
-        <Field label="Why was it lost?" error={errors.lost_reason} highlight={hl('lost_reason')}>
-          <Select value={form.lost_reason} onChange={set('lost_reason')} options={options.lostReasons} error={errors.lost_reason} />
+        <FieldSeparator />
+
+        <div className="grid gap-5 md:grid-cols-2">
+          <Field>
+            <FieldLabel>Came from</FieldLabel>
+            <Segmented label="Source" options={['Ad', 'Other']} value={form.source} onChange={set('source')} />
+          </Field>
+          {form.source === 'Ad' && campaigns.length > 0 && (
+            <Field data-invalid={!!errors.campaign_id}>
+              <FieldLabel htmlFor="campaign">Which ad</FieldLabel>
+              <NativeSelect id="campaign" value={form.campaign_id} onChange={set('campaign_id')} aria-invalid={!!errors.campaign_id} className={cn('w-full [&_select]:h-11 [&_select]:rounded-xl [&_select]:text-base md:[&_select]:h-10 md:[&_select]:text-sm', glow('campaign_id'))}>
+                <NativeSelectOption value="">Choose the campaign…</NativeSelectOption>
+                {campaigns.map((c) => (
+                  <NativeSelectOption key={c.id} value={String(c.id)}>
+                    {c.name}
+                  </NativeSelectOption>
+                ))}
+              </NativeSelect>
+              <FieldError>{errors.campaign_id}</FieldError>
+            </Field>
+          )}
+        </div>
+
+        <Field>
+          <FieldLabel>Status</FieldLabel>
+          <div className={cn('rounded-xl', glow('status'))}>
+            <Segmented
+              label="Status"
+              options={options.statuses}
+              value={form.status}
+              onChange={set('status')}
+              itemClass={(o) => cn('aria-pressed:border', STATUS_ON[o])}
+            />
+          </div>
         </Field>
-      )}
 
-      <Field
-        label="Handled by"
-        error={errors.handled_by}
-        hint={options.staff.length ? undefined : 'Ask the agency to add staff names in Settings.'}
-      >
-        {options.staff.length ? (
-          <Select value={form.handled_by} onChange={set('handled_by')} options={options.staff} error={errors.handled_by} />
-        ) : (
-          <Input value={form.handled_by} onChange={set('handled_by')} placeholder="Your name" error={errors.handled_by} />
+        {form.status === 'Won' && (
+          <Field data-invalid={!!errors.amount} className="animate-in fade-in slide-in-from-top-1">
+            <FieldLabel htmlFor="amount">Order value</FieldLabel>
+            <InputGroup className={cn('h-11 rounded-xl md:h-10', glow('amount'))}>
+              <InputGroupAddon>
+                <InputGroupText className="font-semibold">AED</InputGroupText>
+              </InputGroupAddon>
+              <InputGroupInput id="amount" type="number" inputMode="decimal" min="0" value={form.amount} onChange={set('amount')} placeholder="0" aria-invalid={!!errors.amount} className="num text-base md:text-sm" />
+            </InputGroup>
+            <FieldError>{errors.amount}</FieldError>
+          </Field>
         )}
-      </Field>
 
-      <Field label="Note" optional highlight={hl('note')}>
-        <Input value={form.note} onChange={set('note')} maxLength={200} placeholder="Quantity, deadline…" />
-      </Field>
+        {form.status === 'Lost' && (
+          <Field data-invalid={!!errors.lost_reason} className="animate-in fade-in slide-in-from-top-1">
+            <FieldLabel htmlFor="lost_reason">Why was it lost?</FieldLabel>
+            <NativeSelect id="lost_reason" value={form.lost_reason} onChange={set('lost_reason')} aria-invalid={!!errors.lost_reason} className="w-full [&_select]:h-11 [&_select]:rounded-xl [&_select]:text-base md:[&_select]:h-10 md:[&_select]:text-sm">
+              <NativeSelectOption value="">Choose a reason…</NativeSelectOption>
+              {options.lostReasons.map((r) => (
+                <NativeSelectOption key={r} value={r}>
+                  {r}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
+            <FieldError>{errors.lost_reason}</FieldError>
+          </Field>
+        )}
 
-      <ErrorNote>{formError}</ErrorNote>
+        <FieldSeparator />
+
+        <div className="grid gap-5 md:grid-cols-2">
+          <Field data-invalid={!!errors.handled_by}>
+            <FieldLabel htmlFor="handled_by">Handled by</FieldLabel>
+            {options.staff.length ? (
+              <NativeSelect id="handled_by" value={form.handled_by} onChange={set('handled_by')} aria-invalid={!!errors.handled_by} className="w-full [&_select]:h-11 [&_select]:rounded-xl [&_select]:text-base md:[&_select]:h-10 md:[&_select]:text-sm">
+                <NativeSelectOption value="">Choose…</NativeSelectOption>
+                {options.staff.map((s) => (
+                  <NativeSelectOption key={s} value={s}>
+                    {s}
+                  </NativeSelectOption>
+                ))}
+              </NativeSelect>
+            ) : (
+              <>
+                <Input id="handled_by" value={form.handled_by} onChange={set('handled_by')} placeholder="Your name" aria-invalid={!!errors.handled_by} className={CONTROL} />
+                <FieldDescription>The agency can add staff names in Settings.</FieldDescription>
+              </>
+            )}
+            <FieldError>{errors.handled_by}</FieldError>
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="note">
+              Note <span className="font-normal text-muted-foreground">(optional)</span>
+            </FieldLabel>
+            <Input id="note" value={form.note} onChange={set('note')} maxLength={200} placeholder="Quantity, deadline…" className={cn(CONTROL, glow('note'))} />
+          </Field>
+        </div>
+      </FieldGroup>
+
+      <ErrorAlert>{formError}</ErrorAlert>
 
       {isNew ? (
         // Fixed above the bottom bar on phones so Save is always in reach.
-        <div className="above-nav fixed inset-x-0 z-20 border-t border-line bg-page/95 px-4 py-3 backdrop-blur md:static md:border-0 md:bg-transparent md:p-0">
-          <div className="mx-auto max-w-xl">
-            {repeat && <p className="mb-2 text-center text-sm text-warn">Choose an option above about the earlier lead.</p>}
-            <Button type="submit" busy={busy} disabled={!!repeat} className="w-full">
+        <div className="above-nav fixed inset-x-0 z-20 border-t bg-background/90 px-4 py-3 backdrop-blur-md md:static md:border-0 md:bg-transparent md:p-0 md:backdrop-blur-none">
+          <div className="mx-auto max-w-2xl">
+            {repeat && <p className="mb-2 text-center text-sm text-warning-foreground">Choose an option above about the earlier lead.</p>}
+            <Button type="submit" disabled={busy || !!repeat} className="h-12 w-full rounded-xl text-base">
+              {busy && <Spinner />}
               Save lead
             </Button>
           </div>
         </div>
       ) : (
         <div className="flex gap-2">
-          <Button type="submit" busy={busy} className="flex-1">
+          <Button type="submit" disabled={busy} className="h-11 flex-1 rounded-xl">
+            {busy && <Spinner />}
             Save changes
           </Button>
-          <Button variant="secondary" onClick={onCancel}>
+          <Button variant="outline" onClick={onCancel} className="h-11 rounded-xl">
             Cancel
           </Button>
         </div>
@@ -304,3 +440,4 @@ export default function LeadForm({ lead, onSaved, onCancel }) {
     </form>
   );
 }
+

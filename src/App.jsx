@@ -1,7 +1,11 @@
 import { lazy, Suspense } from 'react';
-import { NavLink, Navigate, Route, Routes } from 'react-router-dom';
+import { NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom';
+import { ChartNoAxesColumnIcon, LogOutIcon, MegaphoneIcon, PlusIcon, SettingsIcon, UsersRoundIcon } from 'lucide-react';
 import { useSession } from './session.jsx';
-import { Spinner, cx } from './components/ui.jsx';
+import { AvmLogo, AvmMark, BuiltBy, CmykBar } from '@/components/brand.jsx';
+import { LoadingBlock } from '@/components/app.jsx';
+import { Spinner } from '@/components/ui/spinner';
+import { cn } from '@/lib/utils';
 import Login from './pages/Login.jsx';
 import LogLead from './pages/LogLead.jsx';
 import Leads from './pages/Leads.jsx';
@@ -14,109 +18,152 @@ const Settings = lazy(() => import('./pages/Settings.jsx'));
 
 const NAV = {
   staff: [
-    { to: '/', label: 'Log lead', icon: 'plus' },
-    { to: '/leads', label: 'Leads', icon: 'list' },
+    { to: '/', label: 'Log lead', icon: PlusIcon },
+    { to: '/leads', label: 'Leads', icon: UsersRoundIcon },
   ],
   agency: [
-    { to: '/', label: 'Dashboard', icon: 'chart' },
-    { to: '/leads', label: 'Leads', icon: 'list' },
-    { to: '/ad-data', label: 'Ad data', icon: 'money' },
-    { to: '/settings', label: 'Settings', icon: 'gear' },
+    { to: '/', label: 'Overview', icon: ChartNoAxesColumnIcon },
+    { to: '/leads', label: 'Leads', icon: UsersRoundIcon },
+    { to: '/ad-data', label: 'Ad data', icon: MegaphoneIcon },
+    { to: '/settings', label: 'Settings', icon: SettingsIcon },
   ],
 };
 
-const ICONS = {
-  plus: 'M12 5v14M5 12h14',
-  list: 'M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01',
-  chart: 'M6 20V12M12 20V6M18 20v-5',
-  money: 'M3 7h18v10H3zM12 9.5a2.5 2.5 0 100 5 2.5 2.5 0 000-5z',
-  gear: 'M12 15a3 3 0 100-6 3 3 0 000 6zM19.4 15a1.7 1.7 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.8-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1.1-1.5 1.7 1.7 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.8 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1.1 1.7 1.7 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.8.3H9a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.8V9a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z',
-};
-
-function Icon({ name }) {
+function Sidebar({ role, signOut }) {
   return (
-    <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d={ICONS[name]} />
-    </svg>
-  );
-}
-
-function Shell({ role, signOut, children }) {
-  const items = NAV[role];
-  return (
-    <div className="min-h-dvh">
-      {/* Laptop: top bar */}
-      <header className="sticky top-0 z-30 hidden border-b border-line bg-page/95 backdrop-blur md:block">
-        <div className="mx-auto flex h-14 max-w-5xl items-center gap-6 px-6">
-          <span className="font-semibold">AVM Leads</span>
-          <nav className="flex gap-1">
-            {items.map((item) => (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                end={item.to === '/'}
-                className={({ isActive }) =>
-                  cx('rounded-lg px-3 py-1.5 text-sm font-medium', isActive ? 'bg-accent/10 text-accent' : 'text-muted hover:text-ink')
-                }
-              >
-                {item.label}
-              </NavLink>
-            ))}
-          </nav>
-          <button type="button" onClick={signOut} className="ml-auto text-sm text-muted hover:text-ink">
-            Sign out
-          </button>
-        </div>
-      </header>
-
-      <main className={cx('mx-auto px-4 pb-28 pt-5 md:px-6 md:pb-12 md:pt-8', role === 'agency' ? 'max-w-5xl' : 'max-w-xl')}>
-        {children}
-      </main>
-
-      {/* Phone: bottom bar */}
-      <nav className="bottom-nav fixed inset-x-0 bottom-0 z-30 flex border-t border-line bg-card md:hidden">
-        {items.map((item) => (
+    <aside className="sticky top-0 hidden h-dvh w-64 shrink-0 flex-col bg-ink text-ink-foreground md:flex">
+      <CmykBar />
+      <div className="px-6 pt-7 pb-8">
+        <AvmLogo className="h-12" />
+      </div>
+      <p className="px-6 pb-2 text-[0.7rem] font-semibold tracking-[0.16em] text-ink-muted uppercase">
+        {role === 'agency' ? 'Campaign desk' : 'Lead desk'}
+      </p>
+      <nav className="flex flex-col gap-0.5 px-3">
+        {NAV[role].map(({ to, label, icon: Icon }) => (
           <NavLink
-            key={item.to}
-            to={item.to}
-            end={item.to === '/'}
+            key={to}
+            to={to}
+            end={to === '/'}
             className={({ isActive }) =>
-              cx('flex flex-1 flex-col items-center justify-center gap-0.5 text-xs font-medium', isActive ? 'text-accent' : 'text-muted')
+              cn(
+                'relative flex h-10 items-center gap-3 rounded-lg px-3 text-[0.95rem] font-medium transition-colors',
+                isActive ? 'bg-sidebar-accent text-white' : 'text-ink-muted hover:bg-sidebar-accent/60 hover:text-ink-foreground',
+              )
             }
           >
-            <Icon name={item.icon} />
-            {item.label}
+            {({ isActive }) => (
+              <>
+                {isActive && <span className="absolute top-2 bottom-2 left-0 w-0.5 rounded-full bg-brand-cyan" />}
+                <Icon className="size-[18px]" strokeWidth={1.8} />
+                {label}
+              </>
+            )}
           </NavLink>
         ))}
       </nav>
-    </div>
+      <div className="mt-auto space-y-5 px-6 pb-6">
+        <button
+          type="button"
+          onClick={signOut}
+          className="flex items-center gap-2 text-sm text-ink-muted transition-colors hover:text-ink-foreground"
+        >
+          <LogOutIcon className="size-4" /> Sign out
+        </button>
+        <div className="border-t border-ink-line pt-5">
+          <BuiltBy />
+        </div>
+      </div>
+    </aside>
+  );
+}
+
+function PhoneHeader({ signOut }) {
+  return (
+    <header className="sticky top-0 z-30 bg-ink text-ink-foreground md:hidden">
+      <CmykBar />
+      <div className="flex h-14 items-center justify-between px-4">
+        <AvmMark className="h-8" />
+        <span className="font-display text-xl italic">AVM Leads</span>
+        <button type="button" onClick={signOut} aria-label="Sign out" className="grid size-9 place-items-center rounded-lg text-ink-muted hover:text-ink-foreground">
+          <LogOutIcon className="size-[18px]" />
+        </button>
+      </div>
+    </header>
+  );
+}
+
+function BottomNav({ role }) {
+  return (
+    <nav className="bottom-nav fixed inset-x-0 bottom-0 z-30 flex border-t border-border bg-card/95 backdrop-blur md:hidden">
+      {NAV[role].map(({ to, label, icon: Icon }) => (
+        <NavLink
+          key={to}
+          to={to}
+          end={to === '/'}
+          className={({ isActive }) =>
+            cn('flex flex-1 flex-col items-center justify-center gap-1 text-[0.7rem] font-semibold', isActive ? 'text-foreground' : 'text-muted-foreground')
+          }
+        >
+          {({ isActive }) => (
+            <>
+              <span className={cn('grid h-7 w-12 place-items-center rounded-full transition-colors', isActive && 'bg-foreground text-background')}>
+                <Icon className="size-[18px]" strokeWidth={isActive ? 2.2 : 1.8} />
+              </span>
+              {label}
+            </>
+          )}
+        </NavLink>
+      ))}
+    </nav>
   );
 }
 
 export default function App() {
   const { loading, role, signOut } = useSession();
-  if (loading) return <Spinner />;
+  const location = useLocation();
+
+  if (loading) {
+    return (
+      <div className="grid min-h-dvh place-items-center">
+        <Spinner className="size-6 text-muted-foreground" />
+      </div>
+    );
+  }
   if (!role) return <Login />;
 
   return (
-    <Shell role={role} signOut={signOut}>
-      <Suspense fallback={<Spinner />}>
-        <Routes>
-          {role === 'staff' ? (
-            <Route path="/" element={<LogLead />} />
-          ) : (
-            <>
-              <Route path="/" element={<Dashboard />} />
-              <Route path="/log" element={<LogLead />} />
-              <Route path="/ad-data" element={<AdData />} />
-              <Route path="/settings" element={<Settings />} />
-            </>
+    <div className="flex min-h-dvh">
+      <Sidebar role={role} signOut={signOut} />
+      <div className="min-w-0 flex-1">
+        <PhoneHeader signOut={signOut} />
+        <main
+          key={location.pathname}
+          className={cn(
+            'mx-auto animate-in px-4 pt-6 pb-28 duration-300 fade-in slide-in-from-bottom-1 md:px-10 md:pt-10 md:pb-16',
+            role === 'agency' ? 'max-w-6xl' : 'max-w-2xl',
           )}
-          <Route path="/leads" element={<Leads />} />
-          <Route path="/leads/:id" element={<LeadDetail />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </Suspense>
-    </Shell>
+        >
+          <Suspense fallback={<LoadingBlock rows={4} />}>
+            <Routes>
+              {role === 'staff' ? (
+                <Route path="/" element={<LogLead />} />
+              ) : (
+                <>
+                  <Route path="/" element={<Dashboard />} />
+                  <Route path="/log" element={<LogLead />} />
+                  <Route path="/ad-data" element={<AdData />} />
+                  <Route path="/settings" element={<Settings />} />
+                </>
+              )}
+              <Route path="/leads" element={<Leads />} />
+              <Route path="/leads/:id" element={<LeadDetail />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </Suspense>
+        </main>
+      </div>
+      <BottomNav role={role} />
+    </div>
   );
 }

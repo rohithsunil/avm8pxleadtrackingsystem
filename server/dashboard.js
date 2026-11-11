@@ -1,11 +1,11 @@
 import { query, one } from './db.js';
 import { HttpError, isoDate } from './http.js';
 import { getSettings } from './settings.js';
-import { REASON_JUNK, REASON_PRICE } from '../shared/constants.js';
+import { REASON_JUNK, REASON_PRICE, TIME_ZONE } from '../shared/constants.js';
 
-// All dates are IST calendar dates as 'YYYY-MM-DD'. Leads are bucketed by the
-// IST date they were logged; ad numbers by the Monday their week starts.
-const IST_DATE = `(l.created_at AT TIME ZONE 'Asia/Kolkata')::date`;
+// All dates are UAE calendar dates as 'YYYY-MM-DD'. Leads are bucketed by the
+// UAE date they were logged; ad numbers by the Monday their week starts.
+const LOCAL_DATE = `(l.created_at AT TIME ZONE '${TIME_ZONE}')::date`;
 
 export function addDays(iso, n) {
   const d = new Date(`${iso}T00:00:00Z`);
@@ -28,7 +28,7 @@ const ratio = (a, b) => (b > 0 ? a / b : null);
 // Lead filter shared by every query: in range, not a duplicate, ad-only unless `all`.
 function leadFilter(from, to, all, start = 1) {
   return {
-    sql: `NOT l.duplicate AND ${IST_DATE} BETWEEN $${start} AND $${start + 1}${all ? '' : ` AND l.source = 'Ad'`}`,
+    sql: `NOT l.duplicate AND ${LOCAL_DATE} BETWEEN $${start} AND $${start + 1}${all ? '' : ` AND l.source = 'Ad'`}`,
     params: [from, to],
   };
 }
@@ -78,7 +78,7 @@ function headline(ad, leads) {
 }
 
 const pct = (x) => `${Math.round(x * 100)}%`;
-const inr = (x) => `₹${Math.round(x).toLocaleString('en-IN')}`;
+const aed = (x) => `AED ${Math.round(x).toLocaleString('en-US')}`;
 
 // The rules from the PRD, applied in order; the first match wins.
 // Always computed on ad leads only, since the funnel starts at the ad.
@@ -122,7 +122,7 @@ export function diagnose({ ad, leads, prevAd, prevLeads, reasons, t }) {
   if (cpl !== null && prevCpl && cpl / prevCpl - 1 > t.cpl_rise_max) {
     return {
       level: 'warning', check: 'adcost',
-      text: `Cost per lead rose ${pct(cpl / prevCpl - 1)} to ${inr(cpl)}. Ads are getting more expensive: refresh the creative.`,
+      text: `Cost per lead rose ${pct(cpl / prevCpl - 1)} to ${aed(cpl)}. Ads are getting more expensive: refresh the creative.`,
     };
   }
   const roas = ratio(leads.revenue, ad.spend);
@@ -143,7 +143,7 @@ async function trend(to, all) {
             COALESCE((SELECT sum(spend) FROM ad_stats a WHERE a.week_start = w.week_start), 0) AS spend,
             COALESCE((SELECT sum(l.amount) FROM leads l
                       WHERE l.status = 'Won' AND NOT l.duplicate ${all ? '' : `AND l.source = 'Ad'`}
-                        AND ${IST_DATE} BETWEEN w.week_start AND w.week_start + 6), 0) AS revenue
+                        AND ${LOCAL_DATE} BETWEEN w.week_start AND w.week_start + 6), 0) AS revenue
      FROM weeks w ORDER BY w.week_start`,
     [start, end],
   );
@@ -161,7 +161,7 @@ async function byCampaign(from, to) {
                        count(*) FILTER (WHERE l.status = 'Won') AS sales,
                        sum(l.amount) FILTER (WHERE l.status = 'Won') AS revenue
                 FROM leads l
-                WHERE NOT l.duplicate AND l.source = 'Ad' AND ${IST_DATE} BETWEEN $1 AND $2
+                WHERE NOT l.duplicate AND l.source = 'Ad' AND ${LOCAL_DATE} BETWEEN $1 AND $2
                 GROUP BY l.campaign_id) x ON x.campaign_id = c.id
      WHERE COALESCE(a.spend, 0) > 0 OR COALESCE(x.leads, 0) > 0
      ORDER BY revenue DESC, spend DESC`,

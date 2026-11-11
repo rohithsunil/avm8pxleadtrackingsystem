@@ -5,7 +5,7 @@ import { one } from './db.js';
 import { HttpError, isoDate, parseOrThrow } from './http.js';
 import { getOptions } from './settings.js';
 import { periodReport, addDays, mondayOf } from './dashboard.js';
-import { LOST_REASONS, STATUSES, normalizePhone } from '../shared/constants.js';
+import { LOST_REASONS, STATUSES, isValidPhone, normalizePhone } from '../shared/constants.js';
 
 // Claude Haiku 5.5: fast and cheap, which suits filling a form while someone waits.
 const MODEL = process.env.CLAUDE_MODEL || 'claude-haiku-5-5';
@@ -43,16 +43,16 @@ const ParsedLead = z.object({
   note: z.string().nullable(),
 });
 
-const PARSE_SYSTEM = `You fill in a lead form for AVM, a print shop in India, from a WhatsApp message or a staff member's quick note.
+const PARSE_SYSTEM = `You fill in a lead form for AVM for Printing, a print shop in the UAE, from a WhatsApp message or a staff member's quick note. The text may be in English, Arabic or a mix.
 
 Return only what the text states. Use null for anything it does not state; never guess a name, number or amount.
-- customer_name: the person's name.
+- customer_name: the person's name, written as it appears.
 - business_name: the customer's business, if one is named.
-- phone: digits only, if a phone number appears.
+- phone: the number as written, including any country code, if a phone number appears.
 - service: must be exactly one of the services listed, picking the closest match; null if none fits.
 - campaign_id: the id of the campaign whose pre-filled message appears in the text; null otherwise.
 - status: "Won" if the note says they paid, ordered or confirmed; "Quoted" if a price was sent; "Lost" if they declined; otherwise null.
-- amount: the rupee amount for a won order as a plain number ("2.5k" is 2500); null if not won or not stated.
+- amount: the amount in UAE dirhams (AED, dhs, dirham) for a won order as a plain number ("2.5k" is 2500); null if not won or not stated.
 - lost_reason: only when status is Lost, one of the listed reasons.
 - note: a short useful detail not captured elsewhere (quantity, deadline), under 15 words; null if nothing.`;
 
@@ -94,7 +94,7 @@ export async function parseLead(body, role) {
   const fields = {
     customer_name: p.customer_name?.trim() || null,
     business_name: p.business_name?.trim() || null,
-    phone: phone && phone.length >= 10 ? phone : null,
+    phone: phone && isValidPhone(phone) ? phone : null,
     service,
     source: campaign ? 'Ad' : null,
     campaign_id: campaign?.id ?? null,
@@ -108,7 +108,7 @@ export async function parseLead(body, role) {
 
 // ---------- Weekly summary ----------
 
-const SUMMARY_SYSTEM = `You write a short weekly note from a marketing agency to its client AVM, a print shop in India that gets customer enquiries on WhatsApp from the agency's ads.
+const SUMMARY_SYSTEM = `You write a short weekly note from a marketing agency to its client AVM for Printing, a print shop in the UAE that gets customer enquiries on WhatsApp from the agency's ads.
 
 Write five or six plain sentences, as one paragraph, no headings, bullets or greeting:
 1. What happened this week: spend, leads, sales and revenue, compared with the four weeks before.
@@ -117,7 +117,7 @@ Write five or six plain sentences, as one paragraph, no headings, bullets or gre
 
 Rules:
 - Use only the numbers given. Never invent or estimate a figure.
-- Money in rupees with the ₹ sign and Indian digit grouping (₹1,25,000).
+- Money in UAE dirhams written as AED with comma grouping (AED 125,000).
 - Factual and neutral. Never blame or name a person.
 - If the diagnosis check is "logging", say the data is incomplete because leads are not being logged, ask for every WhatsApp enquiry to be logged, and draw no other conclusions.
 - If there is very little data, say so plainly.`;

@@ -1,34 +1,70 @@
 import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { api } from '../lib/api.js';
-import { isWaiting, timeAgo } from '../lib/format.js';
-import { useSession } from '../session.jsx';
-import { Empty, ErrorNote, Input, PageTitle, Spinner, StatusChip, cx } from '../components/ui.jsx';
+import { ChevronRightIcon, PlusIcon, SearchIcon, UsersRoundIcon } from 'lucide-react';
+import { api } from '@/lib/api.js';
+import { aed, isWaiting, timeAgo } from '@/lib/format.js';
+import { useSession } from '@/session.jsx';
+import { ErrorAlert, LoadingBlock, PageHeader, StatusBadge } from '@/components/app.jsx';
+import { Frame, FramePanel } from '@/components/reui/frame';
+import { Badge } from '@/components/reui/badge';
+import { Button } from '@/components/ui/button';
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
+import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { cn } from '@/lib/utils';
 
 const FILTERS = ['All', 'New', 'Quoted', 'Won', 'Lost', 'Follow up'];
 
-export function LeadCard({ lead, followupDays }) {
+function initials(name) {
+  return name
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((w) => w[0])
+    .join('')
+    .toUpperCase();
+}
+
+// Avatar tint cycles through AVM's CMYK by name, purely decorative.
+const TINTS = ['bg-brand-cyan/15 text-info-foreground', 'bg-brand-magenta/12 text-[#9c0f5c]', 'bg-brand-yellow/35 text-[#6d6700]', 'bg-foreground/[0.07] text-foreground'];
+const tint = (name) => TINTS[[...name].reduce((s, c) => s + c.charCodeAt(0), 0) % TINTS.length];
+
+export function LeadRow({ lead, followupDays }) {
+  const waiting = isWaiting(lead, followupDays);
   return (
     <Link
       to={`/leads/${lead.id}`}
-      className={cx('block rounded-xl border border-line bg-card p-4 hover:border-accent/40', lead.duplicate && 'opacity-60')}
+      className={cn('group flex items-center gap-3 px-4 py-3.5 transition-colors hover:bg-muted/50 md:gap-4 md:px-5', lead.duplicate && 'opacity-55')}
     >
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="truncate font-medium">{lead.customer_name}</p>
-          {lead.business_name && <p className="truncate text-sm text-muted">{lead.business_name}</p>}
+      <span className={cn('grid size-10 shrink-0 place-items-center rounded-full text-sm font-bold', tint(lead.customer_name))}>
+        {initials(lead.customer_name)}
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <p className="truncate font-semibold">{lead.customer_name}</p>
+          {waiting && (
+            <Badge variant="warning-light" radius="full" size="sm">
+              Follow up
+            </Badge>
+          )}
+          {lead.duplicate && (
+            <Badge variant="outline" radius="full" size="sm">
+              Duplicate
+            </Badge>
+          )}
         </div>
-        <StatusChip status={lead.status} />
+        <p className="truncate text-sm text-muted-foreground">
+          {[lead.business_name, lead.service].filter(Boolean).join(' · ')}
+        </p>
       </div>
-      <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted">
-        <span>{lead.service}</span>
-        <span aria-hidden="true">·</span>
-        <span>{timeAgo(lead.created_at)}</span>
-        {lead.duplicate && <span className="rounded-full bg-line px-2 py-0.5 text-xs font-medium text-muted">Duplicate</span>}
-        {isWaiting(lead, followupDays) && (
-          <span className="rounded-full bg-warn/10 px-2 py-0.5 text-xs font-medium text-warn">Follow up</span>
-        )}
+      <div className="hidden w-32 text-right md:block">
+        <p className="num text-sm font-semibold">{lead.status === 'Won' ? aed(lead.amount) : ''}</p>
+        <p className="text-xs text-muted-foreground">{lead.source === 'Ad' ? (lead.campaign_name ?? 'Ad') : 'Other'}</p>
       </div>
+      <div className="flex w-[5.5rem] flex-col items-end gap-1">
+        <StatusBadge status={lead.status} />
+        <span className="text-xs text-muted-foreground">{timeAgo(lead.created_at)}</span>
+      </div>
+      <ChevronRightIcon className="hidden size-4 text-muted-foreground/50 transition-transform group-hover:translate-x-0.5 md:block" />
     </Link>
   );
 }
@@ -62,12 +98,7 @@ export default function Leads() {
     } else if (filter !== 'All') query.set('status', filter);
     try {
       const data = await api(`/leads?${query}`);
-      setState((s) => ({
-        loading: false,
-        error: '',
-        hasMore: data.hasMore,
-        leads: offset ? [...s.leads, ...data.leads] : data.leads,
-      }));
+      setState((s) => ({ loading: false, error: '', hasMore: data.hasMore, leads: offset ? [...s.leads, ...data.leads] : data.leads }));
     } catch (err) {
       setState((s) => ({ ...s, loading: false, error: err.message }));
     }
@@ -80,67 +111,91 @@ export default function Leads() {
 
   function pickFilter(f) {
     const next = new URLSearchParams(params);
-    if (f === 'All') next.delete('filter');
+    if (!f || f === 'All') next.delete('filter');
     else next.set('filter', f);
     setParams(next, { replace: true });
   }
 
+  const logPath = role === 'agency' ? '/log' : '/';
+  const filtered = params.get('q') || filter !== 'All';
+
   return (
     <div>
-      <PageTitle
+      <PageHeader
+        eyebrow="Pipeline"
+        title="Leads"
+        description="Newest first. Tap a lead to update it."
         action={
           role === 'agency' && (
-            <Link to="/log" className="rounded-[10px] bg-accent px-3 py-2 text-sm font-medium text-white">
-              Log lead
-            </Link>
+            <Button className="h-10 rounded-xl px-4" nativeButton={false} render={<Link to="/log" />}>
+              <PlusIcon data-icon="inline-start" /> Log lead
+            </Button>
           )
         }
-      >
-        Leads
-      </PageTitle>
+      />
 
-      <Input type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name or phone" aria-label="Search leads" />
-
-      <div className="-mx-4 mt-3 flex gap-2 overflow-x-auto px-4 pb-1">
-        {FILTERS.map((f) => (
-          <button
-            key={f}
-            type="button"
-            onClick={() => pickFilter(f)}
-            className={cx(
-              'shrink-0 rounded-full border px-3 py-1.5 text-sm font-medium',
-              filter === f ? 'border-accent bg-accent/10 text-accent' : 'border-line bg-card text-muted',
-            )}
-          >
-            {f}
-          </button>
-        ))}
+      <div className="mb-4 space-y-3">
+        <InputGroup className="h-11 rounded-xl bg-card md:h-10">
+          <InputGroupAddon>
+            <SearchIcon />
+          </InputGroupAddon>
+          <InputGroupInput type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name, business or number" aria-label="Search leads" className="text-base md:text-sm" />
+        </InputGroup>
+        <div className="-mx-4 overflow-x-auto px-4 pb-1 md:mx-0 md:px-0">
+          <ToggleGroup value={[filter]} onValueChange={(v) => pickFilter(v[0])} spacing={2} aria-label="Filter leads">
+            {FILTERS.map((f) => (
+              <ToggleGroupItem
+                key={f}
+                value={f}
+                variant="outline"
+                className="h-9 shrink-0 rounded-full bg-card px-4 font-semibold aria-pressed:border-foreground aria-pressed:bg-foreground aria-pressed:text-background"
+              >
+                {f}
+              </ToggleGroupItem>
+            ))}
+          </ToggleGroup>
+        </div>
       </div>
 
-      <div className="mt-4 space-y-3">
-        <ErrorNote>{state.error}</ErrorNote>
-        {state.loading ? (
-          <Spinner />
-        ) : state.leads.length === 0 ? (
-          <Empty
-            text={params.get('q') || filter !== 'All' ? 'No leads match.' : 'No leads yet. Log your first one.'}
-            action={
-              !params.get('q') && filter === 'All' && (
-                <Link to={role === 'agency' ? '/log' : '/'} className="rounded-[10px] bg-accent px-4 py-2.5 font-medium text-white">
-                  Log a lead
-                </Link>
-              )
-            }
-          />
-        ) : (
-          state.leads.map((lead) => <LeadCard key={lead.id} lead={lead} followupDays={followupDays} />)
-        )}
-        {state.hasMore && !state.loading && (
-          <button type="button" onClick={() => load(state.leads.length)} className="w-full py-3 text-sm font-medium text-accent">
-            Show more
-          </button>
-        )}
-      </div>
+      <ErrorAlert className="mb-4">{state.error}</ErrorAlert>
+
+      {state.loading ? (
+        <LoadingBlock rows={5} />
+      ) : state.leads.length === 0 ? (
+        <Frame>
+          <FramePanel>
+            <Empty>
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <UsersRoundIcon />
+                </EmptyMedia>
+                <EmptyTitle className="font-display text-2xl font-normal">{filtered ? 'No leads match' : 'No leads yet'}</EmptyTitle>
+                <EmptyDescription>{filtered ? 'Try another search or filter.' : 'Log the first WhatsApp enquiry to get started.'}</EmptyDescription>
+              </EmptyHeader>
+              {!filtered && (
+                <EmptyContent>
+                  <Button className="h-10 rounded-xl" nativeButton={false} render={<Link to={logPath} />}>
+                    <PlusIcon data-icon="inline-start" /> Log a lead
+                  </Button>
+                </EmptyContent>
+              )}
+            </Empty>
+          </FramePanel>
+        </Frame>
+      ) : (
+        <Frame>
+          <FramePanel className="divide-y p-0">
+            {state.leads.map((lead) => (
+              <LeadRow key={lead.id} lead={lead} followupDays={followupDays} />
+            ))}
+          </FramePanel>
+          {state.hasMore && (
+            <Button variant="ghost" className="h-10 w-full rounded-xl" onClick={() => load(state.leads.length)}>
+              Show more
+            </Button>
+          )}
+        </Frame>
+      )}
     </div>
   );
 }

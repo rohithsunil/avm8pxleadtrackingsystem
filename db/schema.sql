@@ -63,7 +63,7 @@ CREATE TABLE IF NOT EXISTS login_attempts (
 );
 
 INSERT INTO settings (key, value) VALUES
-  ('services', '["Visiting cards", "Flex banners", "Brochures", "Letterheads", "Stickers and labels", "Other"]'),
+  ('services', '["Business cards", "Flyers", "Roll-up banners", "Brochures", "Stickers and labels", "Signage", "Other"]'),
   ('staff', '[]'),
   ('thresholds', '{"logging_min": 0.70, "junk_max": 0.30, "followup_max": 0.25, "followup_days": 2, "win_rate_min": 0.20, "cpl_rise_max": 0.30, "min_leads": 5}')
 ON CONFLICT (key) DO NOTHING;

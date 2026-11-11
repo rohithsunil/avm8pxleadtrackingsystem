@@ -2,6 +2,7 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import 'dotenv/config';
+import { fileURLToPath } from 'node:url';
 
 // In `npm run dev`, serve /api/* from the same handler Netlify runs,
 // so local development needs no Netlify CLI.
@@ -35,4 +36,5 @@ function localApi() {
 
 export default defineConfig({
   plugins: [react(), tailwindcss(), localApi()],
+  resolve: { alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) } },
 });
