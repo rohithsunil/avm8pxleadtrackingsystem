@@ -37,6 +37,7 @@ async function leadTotals(from, to, all, followupDays) {
   const f = leadFilter(from, to, all);
   return one(
     `SELECT count(*) AS leads,
+            count(DISTINCT lower(regexp_replace(trim(l.customer_name), '\\s+', ' ', 'g'))) AS unique_leads,
             count(*) FILTER (WHERE l.status = 'Won') AS sales,
             COALESCE(sum(l.amount) FILTER (WHERE l.status = 'Won'), 0) AS revenue,
             count(*) FILTER (WHERE l.quoted_at IS NOT NULL) AS quoted,
@@ -74,6 +75,7 @@ function headline(ad, leads) {
   return {
     spend: ad.spend,
     leads: leads.leads,
+    uniqueLeads: leads.unique_leads,
     sales: leads.sales,
     revenue: leads.revenue,
     roas: ratio(leads.revenue, ad.spend),

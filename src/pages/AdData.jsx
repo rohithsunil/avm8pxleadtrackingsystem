@@ -18,7 +18,7 @@ const FIELDS = [
   { key: 'spend', label: 'Amount spent', money: true },
   { key: 'impressions', label: 'Impressions' },
   { key: 'clicks', label: 'Link clicks' },
-  { key: 'conversations', label: 'Chats started' },
+  { key: 'conversations', label: 'Enquiries (Meta results)' },
 ];
 
 export default function AdData() {

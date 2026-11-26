@@ -200,7 +200,7 @@ export default function Leads() {
       </div>
 
       {state.totals && state.totals.leads > 0 && (
-        <div className="mb-4 grid grid-cols-3 divide-x rounded-xl border bg-card">
+        <div className="mb-4 grid grid-cols-2 divide-x rounded-xl border bg-card md:grid-cols-4 [&>*:nth-child(3)]:border-t md:[&>*:nth-child(3)]:border-t-0 [&>*:nth-child(4)]:border-t md:[&>*:nth-child(4)]:border-t-0">
           <div className="px-4 py-3">
             <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">Business won</p>
             <p className="num font-display text-2xl text-success-foreground md:text-3xl">{aed(state.totals.won_value)}</p>
@@ -212,7 +212,12 @@ export default function Leads() {
             <p className="text-xs text-muted-foreground">New and quoted ticket value</p>
           </div>
           <div className="px-4 py-3">
-            <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">Leads</p>
+            <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">Unique leads</p>
+            <p className="num font-display text-2xl md:text-3xl">{count(state.totals.unique_leads)}</p>
+            <p className="text-xs text-muted-foreground">Different businesses</p>
+          </div>
+          <div className="px-4 py-3">
+            <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">Orders</p>
             <p className="num font-display text-2xl md:text-3xl">{count(state.totals.leads)}</p>
             <p className="text-xs text-muted-foreground">{filtered ? 'Matching this filter' : 'All time'}</p>
           </div>

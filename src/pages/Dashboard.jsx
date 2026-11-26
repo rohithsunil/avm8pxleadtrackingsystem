@@ -173,7 +173,7 @@ function Tiles({ now, before }) {
         <Tile label="Ad spend" unit="AED" value={money(now.spend)} foot={`${aed(before.spend)} before`} />
       </Frame>
       <Frame>
-        <Tile label="Leads" value={count(now.leads)} delta={<Delta now={now.leads} before={before.leads} />} />
+        <Tile label="Unique leads" value={count(now.uniqueLeads)} delta={<Delta now={now.uniqueLeads} before={before.uniqueLeads} />} foot={`${count(now.leads)} orders`} />
       </Frame>
       <Frame>
         <Tile label="Sales" value={count(now.sales)} delta={<Delta now={now.sales} before={before.sales} />} />
@@ -191,7 +191,7 @@ function Funnel({ funnel, values }) {
   // Bars are scaled to conversations: clicks are usually 20x larger and would
   // shrink every later step to a sliver, so they are shown as a line above.
   const steps = [
-    { label: 'Chats started', value: funnel.conversations, by: 'Meta' },
+    { label: 'Enquiries started', value: funnel.conversations, by: 'Meta' },
     { label: 'Leads logged', value: funnel.leads, by: 'AVM' },
     { label: 'Quoted', value: funnel.quoted, by: 'AVM' },
     { label: 'Won', value: funnel.won, by: 'AVM' },

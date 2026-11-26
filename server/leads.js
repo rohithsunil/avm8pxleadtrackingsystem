@@ -87,7 +87,10 @@ export async function listLeads(params) {
     ),
     // Totals for everything matching the search/filter, not just this page.
     one(
+      // Unique leads: one per business name (spacing and case ignored), since the
+      // same customer often orders several times.
       `SELECT count(*) FILTER (WHERE NOT l.duplicate) AS leads,
+              count(DISTINCT lower(regexp_replace(trim(l.customer_name), '\\s+', ' ', 'g'))) FILTER (WHERE NOT l.duplicate) AS unique_leads,
               count(*) FILTER (WHERE NOT l.duplicate AND l.status = 'Won') AS won,
               COALESCE(sum(l.amount) FILTER (WHERE NOT l.duplicate AND l.status = 'Won'), 0) AS won_value,
               COALESCE(sum(l.amount) FILTER (WHERE NOT l.duplicate AND l.status IN ('New', 'Quoted')), 0) AS open_value
