@@ -128,15 +128,14 @@ export function diagnose({ ad, leads, prevAd, prevLeads, reasons, t }) {
       text: `Not enough data yet: ${leads.leads} ad lead${leads.leads === 1 ? '' : 's'} logged in this period.`,
     };
   }
-  const logged = ratio(leads.unique_leads, ad.conversations);
-  if (logged !== null && logged < t.logging_min) {
-    const missing = ad.conversations - leads.unique_leads;
+  // The WhatsApp number is only used for the ads, so every invoice is an ad
+  // lead. Leads = what Meta counts; the gap is leads with no invoice.
+  const invoiced = ratio(leads.won_unique, ad.conversations);
+  if (invoiced !== null && invoiced < t.logging_min) {
+    const missing = Math.max(ad.conversations - leads.won_unique, 0);
     return {
       level: 'critical', check: 'logging',
-      text:
-        leads.unique_leads === leads.won_unique
-          ? `The ads generated ${ad.conversations} leads, but only ${leads.won_unique} became invoiced customers. Ask the sales team what happened to the other ${missing}.`
-          : `The ads generated ${ad.conversations} leads, but only ${leads.unique_leads} customers are on record and ${leads.won_unique} were invoiced. Ask the sales team what happened to the other ${missing}.`,
+      text: `The ads brought ${ad.conversations} leads and AVM invoiced ${leads.won_unique} of them (${leads.sales} invoice${leads.sales === 1 ? '' : 's'}). Ask the sales team what happened to the other ${missing}.`,
       missing,
     };
   }

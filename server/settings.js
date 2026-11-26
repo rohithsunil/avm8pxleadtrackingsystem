@@ -30,6 +30,8 @@ export async function getOptions(role) {
     channels: CHANNELS,
     campaigns,
     followupDays: settings.thresholds.followup_days,
+    // First day covered by a Meta report: the dashboard's "Since ads started".
+    adsStart: (await query("SELECT to_char(min(period_start), 'YYYY-MM-DD') AS d FROM ad_reports"))[0]?.d ?? null,
     ...(role === 'agency' ? { thresholds: settings.thresholds } : {}),
   };
 }
