@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { FileSpreadsheetIcon, Trash2Icon, UploadIcon } from 'lucide-react';
 import { api } from '@/lib/api.js';
-import { count, money, rangeLabel } from '@/lib/format.js';
+import { count, money2, rangeLabel } from '@/lib/format.js';
 import { ErrorAlert, LoadingBlock, PageHeader, Section, useConfirm } from '@/components/app.jsx';
 import { Badge } from '@/components/reui/badge';
 import { Button } from '@/components/ui/button';
@@ -95,7 +95,7 @@ export default function AdData() {
       ) : (
         <Section
           title="Imported reports"
-          description={reports.length ? `${reports.length} campaign report${reports.length === 1 ? '' : 's'} · AED ${money(total.spend)} spent · ${count(total.results)} results` : undefined}
+          description={reports.length ? `${reports.length} campaign report${reports.length === 1 ? '' : 's'} · AED ${money2(total.spend)} spent · ${count(total.results)} results` : undefined}
           flush
         >
           {reports.length === 0 ? (
@@ -129,7 +129,7 @@ export default function AdData() {
                       {count(r.results)} <span className="text-xs text-muted-foreground">{r.result_label.toLowerCase()}</span>
                     </TableCell>
                     <TableCell className="text-right">{r.results ? (r.spend / r.results).toFixed(2) : '–'}</TableCell>
-                    <TableCell className="text-right font-semibold">{r.spend.toFixed(2)}</TableCell>
+                    <TableCell className="text-right font-semibold">{money2(r.spend)}</TableCell>
                     <TableCell className="text-right">{count(r.impressions)}</TableCell>
                     <TableCell className="text-right">{r.reach ? count(r.reach) : '–'}</TableCell>
                     <TableCell className="pr-3 text-right">
