@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { CartesianGrid, Line, LineChart, XAxis, YAxis } from 'recharts';
 import { ArrowDownRightIcon, ArrowUpRightIcon, CalendarIcon, MinusIcon } from 'lucide-react';
 import { api } from '@/lib/api.js';
-import { aed, aedShort, addDays, count, greeting, mondayOf, money, pct, presetRange, rangeLabel, shortDate, times, todayLocal, toIso } from '@/lib/format.js';
+import { aed, aedShort, addDays, count, greeting, mondayOf, money, money2, pct, presetRange, rangeLabel, shortDate, times, todayLocal, toIso } from '@/lib/format.js';
 import { ErrorAlert, LoadingBlock, Section } from '@/components/app.jsx';
 import { CmykBar } from '@/components/brand.jsx';
 import WeeklySummary from '@/components/WeeklySummary.jsx';
@@ -20,6 +20,7 @@ import { CHANNEL_DOT } from '@/lib/leadFields.js';
 // ---------- Range controls ----------
 
 const PRESETS = [
+  { key: '30days', label: 'Last 30 days' },
   { key: 'week', label: 'This week' },
   { key: '4weeks', label: '4 weeks' },
   { key: 'month', label: 'This month' },
@@ -94,13 +95,13 @@ const LEVEL = {
 };
 
 const CHECK_HINT = {
-  logging: 'Log every enquiry, not just orders: enquiries that didn’t buy are what show where sales are lost.',
+  logging: 'Each lead is a WhatsApp chat or lead form that reached AVM. For the ones without an invoice: were they quoted, lost, or invoiced under another name?',
   quality: 'Look at the ad audience and the creative’s promise.',
   followup: 'Ask the team to reply to new leads the same day.',
   pricing: 'Review quotes against competitors, or add a smaller starter offer.',
   adcost: 'Try a fresh creative or a new audience.',
   healthy: 'Keep the current ads running and watch cost per lead.',
-  data: 'Log a few more leads and add this week’s ad numbers.',
+  data: 'Upload this period’s Meta report in Ad data, and log enquiries as they come in.',
 };
 
 function Verdict({ diagnosis }) {
@@ -164,24 +165,77 @@ function Tiles({ now, before }) {
   return (
     <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
       <Frame className="col-span-2 lg:col-span-1">
-        <Tile label="Revenue from ads" unit="AED" value={money(now.revenue)} delta={<Delta now={now.revenue} before={before.revenue} />} foot="vs previous" />
+        <Tile label="Invoiced revenue" unit="AED" value={money(now.revenue)} delta={<Delta now={now.revenue} before={before.revenue} />} foot="vs previous" />
       </Frame>
       <Frame>
-        <Tile label="Return on ad spend" value={times(now.roas)} delta={<Delta now={now.roas} before={before.roas} />} foot="vs previous" />
+        <Tile label="Return on ad spend" value={times(now.roas)} delta={<Delta now={now.roas} before={before.roas} />} foot="revenue ÷ spend" />
       </Frame>
       <Frame>
-        <Tile label="Ad spend" unit="AED" value={money(now.spend)} foot={`${aed(before.spend)} before`} />
+        <Tile label="Ad spend" unit="AED" value={money2(now.spend)} foot="as reported by Meta" />
       </Frame>
       <Frame>
-        <Tile label="Unique leads" value={count(now.uniqueLeads)} delta={<Delta now={now.uniqueLeads} before={before.uniqueLeads} />} foot={`${count(now.leads)} orders`} />
+        <Tile
+          label="Leads generated"
+          value={count(now.generated)}
+          delta={<Delta now={now.generated} before={before.generated} />}
+          foot={now.generated ? `${count(now.chats)} chats · ${count(now.forms)} forms` : 'Upload Meta report'}
+        />
       </Frame>
       <Frame>
-        <Tile label="Sales" value={count(now.sales)} delta={<Delta now={now.sales} before={before.sales} />} />
+        <Tile label="Invoiced customers" value={count(now.invoicedCustomers)} delta={<Delta now={now.invoicedCustomers} before={before.invoicedCustomers} />} foot={`${count(now.sales)} invoices`} />
       </Frame>
       <Frame className="col-span-2 lg:col-span-1">
-        <Tile label="Cost per lead" unit="AED" value={money(now.cpl)} delta={<Delta now={now.cpl} before={before.cpl} lowerIsBetter />} foot="lower is better" />
+        <Tile
+          label="Cost per lead"
+          unit="AED"
+          value={now.cpl === null ? '–' : now.cpl.toFixed(2)}
+          delta={<Delta now={now.cpl} before={before.cpl} lowerIsBetter />}
+          foot={now.costPerCustomer ? `AED ${now.costPerCustomer.toFixed(2)} per invoiced customer` : 'lower is better'}
+        />
       </Frame>
     </div>
+  );
+}
+
+// ---------- Leads generated vs invoiced ----------
+
+function GeneratedVsInvoiced({ funnel }) {
+  if (!funnel.generated) return null;
+  const invoiced = Math.min(funnel.invoiced, funnel.generated);
+  const gap = Math.max(funnel.generated - funnel.invoiced, 0);
+  const share = funnel.invoiced / funnel.generated;
+  return (
+    <Section title="Leads generated vs invoiced" description="Leads are what Meta counts (WhatsApp chats and lead forms); invoiced counts each customer once.">
+      <div className="grid gap-6 md:grid-cols-3">
+        <div>
+          <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">Generated by the ads</p>
+          <p className="num font-display text-5xl leading-tight">{count(funnel.generated)}</p>
+          <p className="text-sm text-muted-foreground">
+            {count(funnel.chats)} WhatsApp chats · {count(funnel.forms)} lead forms
+          </p>
+        </div>
+        <div>
+          <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">Invoiced</p>
+          <p className="num font-display text-5xl leading-tight text-success-foreground">{count(funnel.invoiced)}</p>
+          <p className="text-sm text-muted-foreground">
+            customers · {count(funnel.invoices)} invoices · {aed(funnel.revenue)}
+          </p>
+        </div>
+        <div>
+          <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">No invoice yet</p>
+          <p className="num font-display text-5xl leading-tight text-destructive-foreground">{count(gap)}</p>
+          <p className="text-sm text-muted-foreground">leads to ask the sales team about</p>
+        </div>
+      </div>
+      <div className="mt-6">
+        <div className="flex h-3 overflow-hidden rounded-full bg-destructive/15" title={`${pct(share)} of leads invoiced`}>
+          <div className="h-3 rounded-full bg-success" style={{ width: `${(invoiced / funnel.generated) * 100}%` }} />
+        </div>
+        <p className="num mt-2 text-sm text-muted-foreground">
+          <span className="font-semibold text-foreground">{pct(share)}</span> of leads became an invoiced customer
+        </p>
+      </div>
+    </Section>
   );
 }
 
@@ -190,18 +244,19 @@ function Tiles({ now, before }) {
 function Funnel({ funnel, values }) {
   // Bars are scaled to conversations: clicks are usually 20x larger and would
   // shrink every later step to a sliver, so they are shown as a line above.
+  // Customers are counted once each from "on record" onwards.
   const steps = [
-    { label: 'Enquiries started', value: funnel.conversations, by: 'Meta' },
-    { label: 'Leads logged', value: funnel.leads, by: 'AVM' },
+    { label: 'Leads generated', value: funnel.generated, by: 'Meta' },
+    { label: 'Customers on record', value: funnel.onRecord, by: 'AVM' },
     { label: 'Quoted', value: funnel.quoted, by: 'AVM' },
-    { label: 'Won', value: funnel.won, by: 'AVM' },
+    { label: 'Invoiced', value: funnel.invoiced, by: 'AVM' },
   ];
   const top = Math.max(...steps.map((s) => s.value), 1);
   return (
     <Section title="Where leads drop off">
       <p className="num mb-5 text-sm text-muted-foreground">
-        <span className="font-semibold text-foreground">{count(funnel.clicks)}</span> link clicks
-        {funnel.clicks > 0 && ` → ${pct(funnel.conversations / funnel.clicks)} opened a WhatsApp chat`}
+        <span className="font-semibold text-foreground">{count(funnel.impressions)}</span> impressions
+        {funnel.impressions > 0 && funnel.generated > 0 && ` → 1 lead per ${count(Math.round(funnel.impressions / funnel.generated))} impressions`}
       </p>
       <ol className="space-y-4">
         {steps.map((s, i) => {
@@ -355,8 +410,9 @@ function DataTable({ title, description, columns, rows, empty }) {
 // ---------- Page ----------
 
 export default function Dashboard() {
-  const [preset, setPreset] = useState('4weeks');
-  const [range, setRange] = useState(() => presetRange('4weeks'));
+  // Default matches Meta Ads Manager's "Last 30 days", so spend agrees with Meta.
+  const [preset, setPreset] = useState('30days');
+  const [range, setRange] = useState(() => presetRange('30days'));
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
@@ -425,6 +481,7 @@ export default function Dashboard() {
         <div className={cn('space-y-6 transition-opacity', loading && 'opacity-60')}>
           <Verdict diagnosis={data.diagnosis} />
           <Tiles now={data.headline} before={data.previous} />
+          <GeneratedVsInvoiced funnel={data.funnel} />
           <div className="grid gap-4 lg:grid-cols-2">
             <Funnel funnel={data.funnel} values={data.values} />
             <LostReasons rows={data.lostReasons} lostValue={data.values.lost} />
@@ -450,26 +507,35 @@ export default function Dashboard() {
               { label: 'Revenue', render: (r) => money(r.revenue) },
             ]}
           />
-          <div className="grid gap-4 xl:grid-cols-[1.4fr_1fr]">
+          <div className="grid gap-4">
             <DataTable
-              title="By campaign"
+              title="Campaigns"
+              description="Meta Ads Manager figures for this range"
               rows={data.byCampaign}
-              empty="No campaign activity yet. Add campaigns in Settings and weekly numbers in Ad data."
+              empty="No Meta report covers this range. Upload one in Ad data."
               columns={[
-                { label: 'Campaign', render: (r) => r.name },
-                { label: 'Spend', render: (r) => money(r.spend) },
-                { label: 'Leads', render: (r) => count(r.leads) },
-                { label: 'Sales', render: (r) => count(r.sales) },
-                { label: 'Revenue', render: (r) => money(r.revenue) },
-                { label: 'Per lead', render: (r) => money(r.cpl) },
                 {
-                  label: 'Return',
+                  label: 'Campaign',
                   render: (r) => (
-                    <Badge variant={r.roas === null ? 'outline' : r.roas >= 2 ? 'success-light' : r.roas >= 1 ? 'warning-light' : 'destructive-light'} radius="full" size="lg">
-                      {times(r.roas)}
-                    </Badge>
+                    <span className="inline-flex items-center gap-2">
+                      <span className={cn('size-2 shrink-0 rounded-full', r.delivery === 'active' ? 'bg-success' : 'bg-muted-foreground/40')} title={r.delivery || 'unknown'} />
+                      {r.name}
+                    </span>
                   ),
                 },
+                {
+                  label: 'Results',
+                  render: (r) => (
+                    <span>
+                      {count(r.results)} <span className="text-xs font-normal text-muted-foreground">{r.result_label?.toLowerCase()}</span>
+                    </span>
+                  ),
+                },
+                { label: 'Per result', render: (r) => (r.costPerResult === null ? '–' : r.costPerResult.toFixed(2)) },
+                { label: 'Budget/day', render: (r) => (r.daily_budget ? money(r.daily_budget) : '–') },
+                { label: 'Spend', render: (r) => money2(r.spend) },
+                { label: 'Impressions', render: (r) => count(r.impressions) },
+                { label: 'Reach', render: (r) => (r.reach ? count(r.reach) : '–') },
               ]}
             />
             <DataTable

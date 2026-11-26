@@ -50,6 +50,26 @@ CREATE TABLE IF NOT EXISTS ad_stats (
   UNIQUE (campaign_id, week_start)
 );
 
+-- Meta Ads Manager figures, exactly as exported: one row per campaign per
+-- reporting period. Replaces the weekly ad_stats table for the dashboard.
+CREATE TABLE IF NOT EXISTS ad_reports (
+  id            SERIAL PRIMARY KEY,
+  campaign_id   INTEGER NOT NULL REFERENCES campaigns(id),
+  period_start  DATE NOT NULL,
+  period_end    DATE NOT NULL,
+  spend         NUMERIC(12, 2) NOT NULL DEFAULT 0,
+  impressions   INTEGER NOT NULL DEFAULT 0,
+  reach         INTEGER,
+  results       INTEGER NOT NULL DEFAULT 0,
+  result_kind   TEXT NOT NULL DEFAULT 'other' CHECK (result_kind IN ('chat', 'lead_form', 'other')),
+  result_label  TEXT NOT NULL DEFAULT '',
+  daily_budget  NUMERIC(12, 2),
+  delivery      TEXT NOT NULL DEFAULT '',
+  imported_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CHECK (period_end >= period_start),
+  UNIQUE (campaign_id, period_start, period_end)
+);
+
 CREATE TABLE IF NOT EXISTS summaries (
   id          SERIAL PRIMARY KEY,
   week_start  DATE NOT NULL UNIQUE,

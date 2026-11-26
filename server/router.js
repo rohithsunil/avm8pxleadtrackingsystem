@@ -4,6 +4,7 @@ import { createLead, findByPhone, getLead, listLeads, updateLead } from './leads
 import { createCampaign, getOptions, updateCampaign, updateSettings } from './settings.js';
 import { dashboard } from './dashboard.js';
 import { getWeek, saveWeek } from './adstats.js';
+import { deleteReport, importCsv, listReports } from './adreports.js';
 import { editSummary, getSummary, parseLead, writeSummary } from './ai.js';
 import { keyStatus, removeKey, saveKey } from './aikey.js';
 
@@ -32,6 +33,9 @@ const routes = [
   ['GET', '/dashboard', AGENCY, async (req, { url }) => json(await dashboard(url.searchParams))],
   ['GET', '/ad-stats', AGENCY, async (req, { url }) => json(await getWeek(url.searchParams))],
   ['PUT', '/ad-stats', AGENCY, async (req) => json(await saveWeek(await readJson(req)))],
+  ['GET', '/ad-reports', AGENCY, async () => json(await listReports())],
+  ['POST', '/ad-reports/import', AGENCY, async (req) => json(await importCsv(await readJson(req)))],
+  ['DELETE', '/ad-reports/:id', AGENCY, async (req, { id }) => json(await deleteReport(id))],
   ['GET', '/summary', AGENCY, async (req, { url }) => json(await getSummary(url.searchParams))],
   ['POST', '/summary', AGENCY, async (req) => json(await writeSummary(await readJson(req)))],
   ['PUT', '/summary', AGENCY, async (req) => json(await editSummary(await readJson(req)))],

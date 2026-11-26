@@ -4,7 +4,9 @@ import { getSettings } from './settings.js';
 import { REASON_JUNK, REASON_PRICE, TIME_ZONE } from '../shared/constants.js';
 
 // All dates are UAE calendar dates as 'YYYY-MM-DD'. Leads are bucketed by the
-// UAE date they were logged; ad numbers by the Monday their week starts.
+// UAE date they were logged. Ad numbers come from Meta reports (one per
+// campaign per reporting period); a range that covers part of a report takes
+// that share of its days, so totals are exact when the range matches Meta's.
 const LOCAL_DATE = `(l.created_at AT TIME ZONE '${TIME_ZONE}')::date`;
 
 export function addDays(iso, n) {
@@ -25,6 +27,15 @@ function daysBetween(from, to) {
 
 const ratio = (a, b) => (b > 0 ? a / b : null);
 
+// One customer = one business name, ignoring case and spacing.
+const NAME_KEY = `lower(regexp_replace(trim(l.customer_name), '\\s+', ' ', 'g'))`;
+
+// Each Meta report that overlaps [$1, $2], with f = the share of its days inside.
+const REPORTS_IN_RANGE = `
+  SELECT ar.*, (LEAST(ar.period_end, $2::date) - GREATEST(ar.period_start, $1::date) + 1)::numeric
+               / (ar.period_end - ar.period_start + 1) AS f
+  FROM ad_reports ar WHERE ar.period_start <= $2::date AND ar.period_end >= $1::date`;
+
 // Lead filter shared by every query: in range, not a duplicate, ad-only unless `all`.
 function leadFilter(from, to, all, start = 1) {
   return {
@@ -37,7 +48,9 @@ async function leadTotals(from, to, all, followupDays) {
   const f = leadFilter(from, to, all);
   return one(
     `SELECT count(*) AS leads,
-            count(DISTINCT lower(regexp_replace(trim(l.customer_name), '\\s+', ' ', 'g'))) AS unique_leads,
+            count(DISTINCT ${NAME_KEY}) AS unique_leads,
+            count(DISTINCT ${NAME_KEY}) FILTER (WHERE l.status = 'Won') AS won_unique,
+            count(DISTINCT ${NAME_KEY}) FILTER (WHERE l.quoted_at IS NOT NULL) AS quoted_unique,
             count(*) FILTER (WHERE l.status = 'Won') AS sales,
             COALESCE(sum(l.amount) FILTER (WHERE l.status = 'Won'), 0) AS revenue,
             count(*) FILTER (WHERE l.quoted_at IS NOT NULL) AS quoted,
@@ -54,12 +67,26 @@ async function leadTotals(from, to, all, followupDays) {
 }
 
 async function adTotals(from, to) {
-  return one(
-    `SELECT COALESCE(sum(spend), 0) AS spend, COALESCE(sum(impressions), 0) AS impressions,
-            COALESCE(sum(clicks), 0) AS clicks, COALESCE(sum(conversations), 0) AS conversations
-     FROM ad_stats WHERE week_start BETWEEN $1 AND $2`,
-    [mondayOf(from), to],
+  const t = await one(
+    `WITH r AS (${REPORTS_IN_RANGE})
+     SELECT COALESCE(sum(spend * f), 0) AS spend, COALESCE(sum(impressions * f), 0) AS impressions,
+            COALESCE(sum(results * f), 0) AS results,
+            COALESCE(sum(results * f) FILTER (WHERE result_kind = 'chat'), 0) AS chats,
+            COALESCE(sum(results * f) FILTER (WHERE result_kind = 'lead_form'), 0) AS forms,
+            count(*) AS reports
+     FROM r`,
+    [from, to],
   );
+  // "conversations" = leads the ads generated, as Meta counts them.
+  return {
+    spend: Math.round(t.spend * 100) / 100,
+    impressions: Math.round(t.impressions),
+    conversations: Math.round(t.results),
+    chats: Math.round(t.chats),
+    forms: Math.round(t.forms),
+    clicks: 0,
+    reports: t.reports,
+  };
 }
 
 async function lostReasons(from, to, all) {
@@ -74,12 +101,18 @@ async function lostReasons(from, to, all) {
 function headline(ad, leads) {
   return {
     spend: ad.spend,
+    generated: ad.conversations,
+    chats: ad.chats,
+    forms: ad.forms,
     leads: leads.leads,
     uniqueLeads: leads.unique_leads,
     sales: leads.sales,
+    invoicedCustomers: leads.won_unique,
     revenue: leads.revenue,
     roas: ratio(leads.revenue, ad.spend),
-    cpl: ratio(ad.spend, leads.leads),
+    // Cost per lead the ads generated (Meta's count), falling back to logged leads.
+    cpl: ratio(ad.spend, ad.conversations || leads.unique_leads),
+    costPerCustomer: ratio(ad.spend, leads.won_unique),
   };
 }
 
@@ -95,11 +128,16 @@ export function diagnose({ ad, leads, prevAd, prevLeads, reasons, t }) {
       text: `Not enough data yet: ${leads.leads} ad lead${leads.leads === 1 ? '' : 's'} logged in this period.`,
     };
   }
-  const logged = ratio(leads.leads, ad.conversations);
+  const logged = ratio(leads.unique_leads, ad.conversations);
   if (logged !== null && logged < t.logging_min) {
+    const missing = ad.conversations - leads.unique_leads;
     return {
       level: 'critical', check: 'logging',
-      text: `Only ${leads.leads} of ${ad.conversations} Meta enquiries were logged as leads (${pct(logged)}). Leads are not being logged, so the numbers below cannot be trusted yet.`,
+      text:
+        leads.unique_leads === leads.won_unique
+          ? `The ads generated ${ad.conversations} leads, but only ${leads.won_unique} became invoiced customers. Ask the sales team what happened to the other ${missing}.`
+          : `The ads generated ${ad.conversations} leads, but only ${leads.unique_leads} customers are on record and ${leads.won_unique} were invoiced. Ask the sales team what happened to the other ${missing}.`,
+      missing,
     };
   }
   const junk = ratio(leads.junk, leads.leads);
@@ -146,7 +184,9 @@ async function trend(to, all) {
        SELECT generate_series($1::date, $2::date, interval '7 days')::date AS week_start
      )
      SELECT w.week_start,
-            COALESCE((SELECT sum(spend) FROM ad_stats a WHERE a.week_start = w.week_start), 0) AS spend,
+            COALESCE((SELECT sum(ar.spend * (LEAST(ar.period_end, w.week_start + 6) - GREATEST(ar.period_start, w.week_start) + 1)::numeric
+                                 / (ar.period_end - ar.period_start + 1))
+                      FROM ad_reports ar WHERE ar.period_start <= w.week_start + 6 AND ar.period_end >= w.week_start), 0) AS spend,
             COALESCE((SELECT sum(l.amount) FROM leads l
                       WHERE l.status = 'Won' AND NOT l.duplicate ${all ? '' : `AND l.source = 'Ad'`}
                         AND ${LOCAL_DATE} BETWEEN w.week_start AND w.week_start + 6), 0) AS revenue
@@ -156,25 +196,26 @@ async function trend(to, all) {
 }
 
 async function byCampaign(from, to) {
-  // Ad leads only: an "Other" lead has no campaign.
-  return query(
-    `SELECT c.id, c.name, COALESCE(a.spend, 0) AS spend, COALESCE(x.leads, 0) AS leads,
-            COALESCE(x.sales, 0) AS sales, COALESCE(x.revenue, 0) AS revenue
-     FROM campaigns c
-     LEFT JOIN (SELECT campaign_id, sum(spend) AS spend FROM ad_stats
-                WHERE week_start BETWEEN $3 AND $2 GROUP BY campaign_id) a ON a.campaign_id = c.id
-     LEFT JOIN (SELECT l.campaign_id, count(*) AS leads,
-                       count(*) FILTER (WHERE l.status = 'Won') AS sales,
-                       sum(l.amount) FILTER (WHERE l.status = 'Won') AS revenue
-                FROM leads l
-                WHERE NOT l.duplicate AND l.source = 'Ad' AND ${LOCAL_DATE} BETWEEN $1 AND $2
-                GROUP BY l.campaign_id) x ON x.campaign_id = c.id
-     WHERE COALESCE(a.spend, 0) > 0 OR COALESCE(x.leads, 0) > 0
-     ORDER BY revenue DESC, spend DESC`,
-    [from, to, mondayOf(from)],
-  ).then((rows) =>
-    rows.map((r) => ({ ...r, cpl: ratio(r.spend, r.leads), roas: ratio(r.revenue, r.spend) })),
+  // Meta's own figures per campaign for the range. Reach can't be split by
+  // days, so it shows only when the range covers the whole report.
+  const rows = await query(
+    `WITH r AS (${REPORTS_IN_RANGE})
+     SELECT c.id, c.name, c.active,
+            sum(r.spend * r.f) AS spend, sum(r.impressions * r.f) AS impressions, sum(r.results * r.f) AS results,
+            CASE WHEN count(*) = 1 AND min(r.f) >= 0.9999 THEN max(r.reach) END AS reach,
+            max(r.result_label) AS result_label, max(r.daily_budget) AS daily_budget,
+            (array_agg(r.delivery ORDER BY r.period_end DESC))[1] AS delivery
+     FROM r JOIN campaigns c ON c.id = r.campaign_id
+     GROUP BY c.id ORDER BY spend DESC`,
+    [from, to],
   );
+  return rows.map((r) => ({
+    ...r,
+    spend: Math.round(r.spend * 100) / 100,
+    impressions: Math.round(r.impressions),
+    results: Math.round(r.results),
+    costPerResult: ratio(r.spend, Math.round(r.results)),
+  }));
 }
 
 async function bySalesperson(from, to, all, followupDays) {
@@ -226,11 +267,15 @@ export async function periodReport(from, to, all = false) {
     headline: headline(ad, shown),
     previous: headline(prevAd, prevShown),
     funnel: {
-      clicks: ad.clicks,
-      conversations: ad.conversations,
-      leads: adLeads.leads,
-      quoted: adLeads.quoted,
-      won: adLeads.sales,
+      impressions: ad.impressions,
+      generated: ad.conversations,
+      chats: ad.chats,
+      forms: ad.forms,
+      onRecord: adLeads.unique_leads,
+      quoted: adLeads.quoted_unique,
+      invoiced: adLeads.won_unique,
+      invoices: adLeads.sales,
+      revenue: adLeads.revenue,
     },
     // Ticket values: what's still in play and what was lost, in AED.
     values: { open: shown.open_value, openCount: shown.open_count, openPriced: shown.open_priced, lost: shown.lost_value },

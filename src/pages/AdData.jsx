@@ -1,179 +1,148 @@
-import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { CheckCircle2Icon, ChevronLeftIcon, ChevronRightIcon, CircleDashedIcon, MegaphoneIcon } from 'lucide-react';
+import { FileSpreadsheetIcon, Trash2Icon, UploadIcon } from 'lucide-react';
 import { api } from '@/lib/api.js';
-import { aed, addDays, mondayOf, rangeLabel, todayLocal } from '@/lib/format.js';
+import { count, money, rangeLabel } from '@/lib/format.js';
 import { ErrorAlert, LoadingBlock, PageHeader, Section, useConfirm } from '@/components/app.jsx';
 import { Badge } from '@/components/reui/badge';
-import { Frame, FramePanel } from '@/components/reui/frame';
 import { Button } from '@/components/ui/button';
-import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
-import { Field, FieldLabel } from '@/components/ui/field';
-import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from '@/components/ui/input-group';
-import { Input } from '@/components/ui/input';
 import { Spinner } from '@/components/ui/spinner';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { cn } from '@/lib/utils';
 
-const FIELDS = [
-  { key: 'spend', label: 'Amount spent', money: true },
-  { key: 'impressions', label: 'Impressions' },
-  { key: 'clicks', label: 'Link clicks' },
-  { key: 'conversations', label: 'Enquiries (Meta results)' },
-];
-
+// Ad data = Meta Ads Manager's Campaigns export, kept exactly as Meta reports it.
 export default function AdData() {
   const confirm = useConfirm();
-  const [week, setWeek] = useState(() => addDays(mondayOf(todayLocal()), -7)); // last full week
-  const [data, setData] = useState(null);
-  const [rows, setRows] = useState([]);
+  const [reports, setReports] = useState(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [dragging, setDragging] = useState(false);
+  const input = useRef(null);
 
   useEffect(() => {
-    setData(null);
-    setError('');
-    api(`/ad-stats?week=${week}`).then(
-      (d) => {
-        setData(d);
-        setRows(d.rows.map((r) => ({ ...r, ...Object.fromEntries(FIELDS.map((f) => [f.key, r.saved ? String(r[f.key]) : ''])) })));
-      },
-      (err) => setError(err.message),
-    );
-  }, [week]);
+    api('/ad-reports').then((d) => setReports(d.reports), (err) => setError(err.message));
+  }, []);
 
-  const setCell = (i, key, value) => setRows((rs) => rs.map((r, j) => (j === i ? { ...r, [key]: value } : r)));
-
-  async function save() {
-    if (
-      data.exists &&
-      !(await confirm({ title: 'Replace saved numbers?', description: `Numbers for ${rangeLabel(week, addDays(week, 6))} are already saved.`, confirmLabel: 'Replace' }))
-    )
-      return;
+  async function upload(file) {
+    if (!file) return;
+    if (!/\.csv$/i.test(file.name)) return setError('Choose the .csv file exported from Ads Manager.');
     setBusy(true);
     setError('');
     try {
-      const body = {
-        week_start: week,
-        rows: rows.map((r) => ({ campaign_id: r.campaign_id, ...Object.fromEntries(FIELDS.map((f) => [f.key, Number(r[f.key] || 0)])) })),
-      };
-      setData(await api('/ad-stats', { method: 'PUT', body }));
-      toast.success('Week saved');
+      const csv = await file.text();
+      const d = await api('/ad-reports/import', { method: 'POST', body: { csv } });
+      setReports(d.reports);
+      toast.success(
+        `Imported ${d.imported} campaign${d.imported === 1 ? '' : 's'}` +
+          (d.replaced ? `, replacing ${d.replaced} older report${d.replaced === 1 ? '' : 's'} for the same days` : '') +
+          (d.skipped.length ? `. Skipped ${d.skipped.length} with no delivery` : ''),
+      );
     } catch (err) {
       setError(err.message);
     } finally {
       setBusy(false);
+      if (input.current) input.current.value = '';
     }
   }
 
-  const totalSpend = rows.reduce((s, r) => s + Number(r.spend || 0), 0);
-  const isCurrentWeek = week >= mondayOf(todayLocal());
+  async function remove(r) {
+    if (!(await confirm({ title: `Remove ${r.campaign}?`, description: `Its figures for ${rangeLabel(r.period_start, r.period_end)} leave the dashboard.`, confirmLabel: 'Remove', destructive: true }))) return;
+    try {
+      setReports((await api(`/ad-reports/${r.id}`, { method: 'DELETE' })).reports);
+      toast.success('Report removed');
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  const total = (reports ?? []).reduce((a, r) => ({ spend: a.spend + r.spend, results: a.results + r.results }), { spend: 0, results: 0 });
 
   return (
     <div className="space-y-6">
-      <PageHeader eyebrow="Weekly, from Meta Ads Manager" title="Ad data" description="Four numbers per campaign. Use the ‘Messaging conversations started’ result for chats." />
+      <PageHeader eyebrow="From Meta Ads Manager" title="Ad data" description="Upload the Campaigns export. Figures are kept exactly as Meta reports them." />
 
-      <Frame>
-        <FramePanel className="flex items-center gap-3 py-3">
-          <Button variant="outline" size="icon-lg" className="rounded-xl" onClick={() => setWeek(addDays(week, -7))} aria-label="Previous week">
-            <ChevronLeftIcon />
+      <Section title="Upload a Meta report">
+        <div
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDragging(true);
+          }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setDragging(false);
+            upload(e.dataTransfer.files?.[0]);
+          }}
+          className={cn('flex flex-col items-center gap-3 rounded-xl border-2 border-dashed px-6 py-8 text-center transition-colors', dragging ? 'border-brand-cyan bg-brand-cyan/5' : 'border-border')}
+        >
+          <FileSpreadsheetIcon className="size-8 text-muted-foreground" />
+          <p className="font-medium">Drop the CSV here, or choose the file</p>
+          <input ref={input} type="file" accept=".csv,text/csv" className="hidden" onChange={(e) => upload(e.target.files?.[0])} />
+          <Button onClick={() => input.current?.click()} disabled={busy} className="h-10 rounded-xl px-5">
+            {busy ? <Spinner /> : <UploadIcon data-icon="inline-start" />} {busy ? 'Importing…' : 'Choose CSV'}
           </Button>
-          <div className="flex-1 text-center">
-            <p className="font-display text-2xl leading-tight">{rangeLabel(week, addDays(week, 6))}</p>
-            {data && (
-              <Badge variant={data.exists ? 'success-light' : 'outline'} radius="full" size="lg" className="mt-1 gap-1">
-                {data.exists ? <CheckCircle2Icon /> : <CircleDashedIcon />}
-                {data.exists ? 'Saved' : 'Not entered yet'}
-              </Badge>
-            )}
-          </div>
-          <Button variant="outline" size="icon-lg" className="rounded-xl" onClick={() => setWeek(addDays(week, 7))} disabled={isCurrentWeek} aria-label="Next week">
-            <ChevronRightIcon />
-          </Button>
-        </FramePanel>
-      </Frame>
+          <ol className="mt-2 max-w-xl list-decimal space-y-1 pl-5 text-left text-sm text-muted-foreground">
+            <li>In Ads Manager, open <span className="font-medium text-foreground">Campaigns</span> and pick the date range (for example Last 30 days).</li>
+            <li>Keep <span className="font-medium text-foreground">Columns: Performance</span>, then <span className="font-medium text-foreground">Export → Export table data → .csv</span>.</li>
+            <li>Upload it here. A newer export for the same days replaces the older one, so nothing is counted twice.</li>
+          </ol>
+        </div>
+        <ErrorAlert className="mt-4">{error}</ErrorAlert>
+      </Section>
 
-      <ErrorAlert>{error}</ErrorAlert>
-
-      {!data ? (
+      {!reports ? (
         !error && <LoadingBlock rows={2} />
-      ) : rows.length === 0 ? (
-        <Frame>
-          <FramePanel>
-            <Empty>
-              <EmptyHeader>
-                <EmptyMedia variant="icon">
-                  <MegaphoneIcon />
-                </EmptyMedia>
-                <EmptyTitle className="font-display text-2xl font-normal">No active campaigns</EmptyTitle>
-                <EmptyDescription>Add the ads you're running in Settings first.</EmptyDescription>
-              </EmptyHeader>
-              <EmptyContent>
-                <Button className="h-10 rounded-xl" nativeButton={false} render={<Link to="/settings" />}>
-                  Go to Settings
-                </Button>
-              </EmptyContent>
-            </Empty>
-          </FramePanel>
-        </Frame>
       ) : (
-        <>
-          <div className="space-y-4">
-            {rows.map((r, i) => (
-              <Section
-                key={r.campaign_id}
-                title={r.name}
-                action={
-                  !r.active && (
-                    <Badge variant="outline" radius="full">
-                      Ended
-                    </Badge>
-                  )
-                }
-              >
-                <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-                  {FIELDS.map((f) => {
-                    const id = `campaign-${r.campaign_id}-${f.key}`;
-                    const props = {
-                      id,
-                      type: 'number',
-                      min: '0',
-                      step: f.money ? '0.01' : '1',
-                      inputMode: f.money ? 'decimal' : 'numeric',
-                      value: r[f.key],
-                      placeholder: '0',
-                      onChange: (e) => setCell(i, f.key, e.target.value),
-                    };
-                    return (
-                      <Field key={f.key}>
-                        <FieldLabel htmlFor={id} className="text-muted-foreground">
-                          {f.label}
-                        </FieldLabel>
-                        {f.money ? (
-                          <InputGroup className="h-11 rounded-xl md:h-10">
-                            <InputGroupAddon>
-                              <InputGroupText className="text-xs font-semibold">AED</InputGroupText>
-                            </InputGroupAddon>
-                            <InputGroupInput {...props} className="num text-right text-base md:text-sm" />
-                          </InputGroup>
-                        ) : (
-                          <Input {...props} className="num h-11 rounded-xl text-right text-base md:h-10 md:text-sm" />
+        <Section
+          title="Imported reports"
+          description={reports.length ? `${reports.length} campaign report${reports.length === 1 ? '' : 's'} · AED ${money(total.spend)} spent · ${count(total.results)} results` : undefined}
+          flush
+        >
+          {reports.length === 0 ? (
+            <p className="px-5 py-8 text-center text-sm text-muted-foreground">No reports yet. Upload a Meta export above.</p>
+          ) : (
+            <Table className="num min-w-[760px]">
+              <TableHeader>
+                <TableRow className="hover:bg-transparent">
+                  {['Campaign', 'Period', 'Results', 'Per result', 'Spend (AED)', 'Impressions', 'Reach', ''].map((h, i) => (
+                    <TableHead key={h || i} className={cn('h-10 text-xs font-semibold tracking-wide text-muted-foreground uppercase', i === 0 ? 'pl-5' : i < 2 ? '' : 'text-right', i === 7 && 'w-12 pr-3')}>
+                      {h}
+                    </TableHead>
+                  ))}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {reports.map((r) => (
+                  <TableRow key={r.id}>
+                    <TableCell className="py-3 pl-5 font-semibold">
+                      <span className="inline-flex items-center gap-2">
+                        {r.campaign}
+                        {r.delivery && (
+                          <Badge variant={r.delivery === 'active' ? 'success-light' : 'outline'} radius="full">
+                            {r.delivery === 'active' ? 'Active' : 'Off'}
+                          </Badge>
                         )}
-                      </Field>
-                    );
-                  })}
-                </div>
-              </Section>
-            ))}
-          </div>
-          <div className="flex items-center justify-between gap-3">
-            <p className="text-sm text-muted-foreground">
-              Total spend <span className="num ml-1 font-display text-2xl text-foreground">{aed(totalSpend)}</span>
-            </p>
-            <Button disabled={busy} onClick={save} className="h-11 rounded-xl px-6">
-              {busy && <Spinner />} Save week
-            </Button>
-          </div>
-        </>
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">{rangeLabel(r.period_start, r.period_end)}</TableCell>
+                    <TableCell className="text-right">
+                      {count(r.results)} <span className="text-xs text-muted-foreground">{r.result_label.toLowerCase()}</span>
+                    </TableCell>
+                    <TableCell className="text-right">{r.results ? (r.spend / r.results).toFixed(2) : '–'}</TableCell>
+                    <TableCell className="text-right font-semibold">{r.spend.toFixed(2)}</TableCell>
+                    <TableCell className="text-right">{count(r.impressions)}</TableCell>
+                    <TableCell className="text-right">{r.reach ? count(r.reach) : '–'}</TableCell>
+                    <TableCell className="pr-3 text-right">
+                      <Button variant="ghost" size="icon-sm" onClick={() => remove(r)} aria-label={`Remove ${r.campaign}`} className="text-muted-foreground hover:text-destructive">
+                        <Trash2Icon />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </Section>
       )}
     </div>
   );

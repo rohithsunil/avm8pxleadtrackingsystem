@@ -7,6 +7,9 @@ const number = new Intl.NumberFormat('en-AE', { maximumFractionDigits: 0 });
 export const aed = (n) => (n === null || n === undefined ? '–' : `AED ${number.format(n)}`);
 /** "12,500" for places where the AED label sits beside the figure */
 export const money = (n) => (n === null || n === undefined ? '–' : number.format(n));
+/** "1,234.56": money where the exact figure matters (ad spend). */
+const number2 = new Intl.NumberFormat('en-AE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+export const money2 = (n) => (n === null || n === undefined ? '–' : number2.format(n));
 export const count = (n) => (n === null || n === undefined ? '–' : number.format(n));
 export const pct = (x) => (x === null || x === undefined ? '–' : `${Math.round(x * 100)}%`);
 export const times = (x) => (x === null || x === undefined ? '–' : `${x.toFixed(1)}×`);
@@ -64,6 +67,8 @@ export function presetRange(preset) {
   const today = todayLocal();
   if (preset === 'week') return { from: mondayOf(today), to: today };
   if (preset === 'month') return { from: `${today.slice(0, 8)}01`, to: today };
+  // Same as Meta Ads Manager's "Last 30 days": ends yesterday.
+  if (preset === '30days') return { from: addDays(today, -30), to: addDays(today, -1) };
   return { from: addDays(mondayOf(today), -21), to: today }; // last 4 weeks, starting on a Monday
 }
 
