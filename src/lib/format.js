@@ -1,3 +1,5 @@
+import { TRACKING_START } from '../../shared/constants.js';
+
 // Formatting for a UAE client: dirhams (AED) and Dubai dates.
 
 const TIME_ZONE = 'Asia/Dubai';
@@ -63,14 +65,17 @@ export function rangeLabel(from, to) {
   return from === to ? shortDate(from) : `${shortDate(from)} – ${shortDate(to)}`;
 }
 
+/** Ranges never start before tracking began (1 Nov). */
 export function presetRange(preset) {
   const today = todayLocal();
-  if (preset === 'week') return { from: mondayOf(today), to: today };
-  if (preset === 'month') return { from: `${today.slice(0, 8)}01`, to: today };
+  const clamp = ({ from, to }) => ({ from: from < TRACKING_START ? TRACKING_START : from, to });
+  if (preset === 'week') return clamp({ from: mondayOf(today), to: today });
+  if (preset === 'month') return clamp({ from: `${today.slice(0, 8)}01`, to: today });
   // Same as Meta Ads Manager's "Last 30 days": ends yesterday.
-  if (preset === '30days') return { from: addDays(today, -30), to: addDays(today, -1) };
-  return { from: addDays(mondayOf(today), -21), to: today }; // last 4 weeks, starting on a Monday
+  if (preset === '30days') return clamp({ from: addDays(today, -30), to: addDays(today, -1) });
+  return clamp({ from: addDays(mondayOf(today), -21), to: today }); // last 4 weeks, starting on a Monday
 }
+export { TRACKING_START };
 
 export function greeting() {
   const hour = Number(new Intl.DateTimeFormat('en-GB', { timeZone: TIME_ZONE, hour: 'numeric', hourCycle: 'h23' }).format(new Date()));

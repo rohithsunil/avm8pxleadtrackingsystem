@@ -1,7 +1,7 @@
 import { query, one } from './db.js';
 import { HttpError, isoDate } from './http.js';
 import { getSettings } from './settings.js';
-import { REASON_JUNK, REASON_PRICE, TIME_ZONE } from '../shared/constants.js';
+import { REASON_JUNK, REASON_PRICE, TIME_ZONE, TRACKING_START } from '../shared/constants.js';
 
 // All dates are UAE calendar dates as 'YYYY-MM-DD'. Leads are bucketed by the
 // UAE date they were logged. Ad numbers come from Meta reports (one per
@@ -175,9 +175,10 @@ export function diagnose({ ad, leads, prevAd, prevLeads, reasons, t }) {
   };
 }
 
+// Weekly points from the tracking start (1 Nov), 7-day buckets, up to `to`.
 async function trend(to, all) {
-  const end = mondayOf(to);
-  const start = addDays(end, -7 * 11);
+  const start = TRACKING_START;
+  const end = to < start ? start : to;
   return query(
     `WITH weeks AS (
        SELECT generate_series($1::date, $2::date, interval '7 days')::date AS week_start
@@ -262,7 +263,8 @@ export async function periodReport(from, to, all = false) {
     : [adLeads, prevAdLeads];
 
   return {
-    range: { from, to, prevFrom, prevTo, includeOther: all },
+    // No comparison when the previous period falls before tracking started.
+    range: { from, to, prevFrom, prevTo, includeOther: all, compare: prevFrom >= TRACKING_START },
     headline: headline(ad, shown),
     previous: headline(prevAd, prevShown),
     funnel: {
@@ -291,9 +293,9 @@ export async function dashboard(params) {
     throw new HttpError(400, 'Pick a valid date range');
   }
   const all = params.get('all') === '1';
-  const report = await periodReport(from, to, all);
+  const report = await periodReport(from < TRACKING_START ? TRACKING_START : from, to < TRACKING_START ? TRACKING_START : to, all);
   const [trendRows, campaigns, people, channels] = await Promise.all([
-    trend(to, all),
+    trend(report.range.to, all),
     byCampaign(from, to),
     bySalesperson(from, to, all, report.thresholds.followup_days),
     byChannel(from, to, all),

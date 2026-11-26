@@ -127,6 +127,7 @@ function Verdict({ diagnosis }) {
 // ---------- KPI tiles ----------
 
 function Delta({ now, before, lowerIsBetter }) {
+  if (before === undefined) return null; // no comparison period (before tracking started)
   if (now === null || before === null || before === 0) {
     return <span className="text-xs text-muted-foreground">No earlier data</span>;
   }
@@ -167,7 +168,7 @@ function Tiles({ now, before }) {
   return (
     <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
       <Frame className="col-span-2 lg:col-span-1">
-        <Tile label="Invoiced revenue" unit="AED" value={money(now.revenue)} delta={<Delta now={now.revenue} before={before.revenue} />} foot="vs previous" />
+        <Tile label="Invoiced revenue" unit="AED" value={money(now.revenue)} delta={<Delta now={now.revenue} before={before.revenue} />} foot={before.revenue !== undefined ? 'vs previous' : `${count(now.invoicedCustomers)} customers`} />
       </Frame>
       <Frame>
         <Tile label="Return on ad spend" value={times(now.roas)} delta={<Delta now={now.roas} before={before.roas} />} foot="revenue ÷ spend" />
@@ -282,7 +283,7 @@ function Trend({ rows }) {
   return (
     <Section
       title="Revenue against ad spend"
-      description="Weekly, last 12 weeks, AED"
+      description="Weekly since 1 Nov, AED"
       action={
         <div className="flex shrink-0 items-center gap-4 text-xs font-medium whitespace-nowrap text-muted-foreground">
           <span className="flex items-center gap-1.5">
@@ -391,7 +392,7 @@ export default function Dashboard() {
           </h1>
           <p className="mt-2 text-[0.95rem] text-muted-foreground">
             {rangeLabel(range.from, range.to)}
-            {data && <> · compared with {rangeLabel(data.range.prevFrom, data.range.prevTo)}</>}
+            {data?.range.compare && <> · compared with {rangeLabel(data.range.prevFrom, data.range.prevTo)}</>}
           </p>
         </div>
         <div className="flex flex-col items-start gap-3 md:items-end">
@@ -431,7 +432,7 @@ export default function Dashboard() {
       ) : data ? (
         <div className={cn('space-y-6 transition-opacity', loading && 'opacity-60')}>
           <Verdict diagnosis={data.diagnosis} />
-          <Tiles now={data.headline} before={data.previous} />
+          <Tiles now={data.headline} before={data.range.compare ? data.previous : {}} />
           <GeneratedVsInvoiced funnel={data.funnel} />
           {data.lostReasons.length > 0 && <LostReasons rows={data.lostReasons} lostValue={data.values.lost} />}
           <Trend rows={data.trend} />

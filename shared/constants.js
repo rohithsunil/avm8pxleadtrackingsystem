@@ -41,4 +41,7 @@ export function normalizePhone(raw) {
 export const isValidPhone = (digits) => digits.length >= 10 && digits.length <= 15;
 
 export const TIME_ZONE = 'Asia/Dubai';
+
+// Nothing before this date is shown: tracking starts with the November ads.
+export const TRACKING_START = '2026-11-01';
 export const CURRENCY = 'AED';
