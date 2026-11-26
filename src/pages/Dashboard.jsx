@@ -94,7 +94,7 @@ const LEVEL = {
 };
 
 const CHECK_HINT = {
-  logging: 'Fix first: until every chat is logged, the rest of this page undercounts.',
+  logging: 'Log every enquiry, not just orders: enquiries that didn’t buy are what show where sales are lost.',
   quality: 'Look at the ad audience and the creative’s promise.',
   followup: 'Ask the team to reply to new leads the same day.',
   pricing: 'Review quotes against competitors, or add a smaller starter offer.',

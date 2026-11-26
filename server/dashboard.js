@@ -99,7 +99,7 @@ export function diagnose({ ad, leads, prevAd, prevLeads, reasons, t }) {
   if (logged !== null && logged < t.logging_min) {
     return {
       level: 'critical', check: 'logging',
-      text: `Only ${leads.leads} of ${ad.conversations} WhatsApp conversations were logged (${pct(logged)}). Leads are not being logged, so the numbers below cannot be trusted yet.`,
+      text: `Only ${leads.leads} of ${ad.conversations} Meta enquiries were logged as leads (${pct(logged)}). Leads are not being logged, so the numbers below cannot be trusted yet.`,
     };
   }
   const junk = ratio(leads.junk, leads.leads);
