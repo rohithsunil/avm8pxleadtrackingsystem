@@ -33,6 +33,9 @@ CREATE TABLE IF NOT EXISTS leads (
 ALTER TABLE leads ADD COLUMN IF NOT EXISTS channel TEXT NOT NULL DEFAULT 'WhatsApp'
   CHECK (channel IN ('WhatsApp', 'Instagram', 'Facebook', 'Phone call'));
 
+-- Invoice number from AVM's own sheets. Kept for reference, not shown in the app.
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS invoice_no TEXT;
+
 CREATE INDEX IF NOT EXISTS leads_created_at_idx ON leads (created_at DESC);
 CREATE INDEX IF NOT EXISTS leads_phone_idx ON leads (phone);
 

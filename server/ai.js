@@ -54,8 +54,8 @@ const ParsedLead = z.object({
 const PARSE_SYSTEM = `You fill in a lead form for AVM for Printing, a print shop in the UAE, from a WhatsApp message or a staff member's quick note. The text may be in English, Arabic or a mix.
 
 Return only what the text states. Use null for anything it does not state; never guess a name, number or amount.
-- customer_name: the person's name, written as it appears.
-- business_name: the customer's business, if one is named.
+- customer_name: the business that is ordering, written as it appears; if the customer is an individual with no business, their own name.
+- business_name: the contact person's name, only when a business is also named; otherwise null.
 - phone: the number as written, including any country code, if a phone number appears.
 - service: what the customer wants, in a few words ("Business cards", "Shop signage"). Use a listed service's exact wording when one fits; otherwise describe it briefly. null if not stated.
 - channel: how the customer reached AVM. "Phone call" if they called; "Instagram" for Instagram or IG DMs; "Facebook" for Facebook or Messenger; "WhatsApp" for WhatsApp or a pasted WhatsApp chat. null if unclear.

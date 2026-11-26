@@ -181,7 +181,7 @@ export default function Leads() {
           <InputGroupAddon>
             <SearchIcon />
           </InputGroupAddon>
-          <InputGroupInput type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name, business or number" aria-label="Search leads" className="text-base md:text-sm" />
+          <InputGroupInput type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search business, customer or number" aria-label="Search leads" className="text-base md:text-sm" />
         </InputGroup>
         <div className="-mx-4 overflow-x-auto px-4 pb-1 md:mx-0 md:px-0">
           <ToggleGroup value={[filter]} onValueChange={(v) => pickFilter(v[0])} spacing={2} aria-label="Filter leads">

@@ -9,7 +9,7 @@ const LEAD_COLUMNS = `
   l.handled_by, l.note, l.duplicate, l.quoted_at, l.closed_at`;
 
 const baseSchema = z.object({
-  customer_name: z.string().trim().min(1, 'Enter the customer name').max(100),
+  customer_name: z.string().trim().min(1, 'Enter the business name').max(100),
   business_name: z.string().trim().max(120).default(''),
   phone: z
     .string()

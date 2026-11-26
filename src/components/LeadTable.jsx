@@ -31,7 +31,9 @@ function useColumns() {
   const { options } = useSession();
   return useMemo(
     () => [
-      { key: 'customer_name', label: 'Customer', width: 180, type: 'text', required: true, placeholder: 'Name', sticky: true },
+      // Naming: `customer_name` holds who ordered (usually a business), shown as
+      // "Business name"; `business_name` holds the contact person, shown last.
+      { key: 'customer_name', label: 'Business name', width: 240, type: 'text', required: true, placeholder: 'Business or person', sticky: true },
       { key: 'phone', label: 'Number', width: 150, type: 'text', required: true, placeholder: '050 123 4567', inputMode: 'tel' },
       { key: 'amount', label: 'Ticket value (AED)', width: 150, type: 'money', placeholder: 'Add price' },
       { key: 'status', label: 'Status', width: 110, type: 'select', options: options.statuses.map((s) => ({ value: s, label: s })) },
@@ -40,12 +42,12 @@ function useColumns() {
       options.staff.length
         ? { key: 'handled_by', label: 'Handled by', width: 140, type: 'select', required: true, blank: 'Choose…', options: options.staff.map((s) => ({ value: s, label: s })) }
         : { key: 'handled_by', label: 'Handled by', width: 140, type: 'text', required: true, placeholder: 'Name' },
-      { key: 'business_name', label: 'Business', width: 170, type: 'text', placeholder: 'Optional' },
       {
         key: 'lost_reason', label: 'Lost because', width: 170, type: 'select', blank: 'Choose…',
         options: options.lostReasons.map((s) => ({ value: s, label: s })), when: (r) => r.status === 'Lost',
       },
       { key: 'note', label: 'Note', width: 220, type: 'text', placeholder: 'Quantity, deadline…' },
+      { key: 'business_name', label: 'Customer name', width: 240, type: 'text', placeholder: 'Contact person (optional)' },
     ],
     [options],
   );

@@ -280,13 +280,13 @@ export default function LeadForm({ lead, onSaved, onCancel }) {
       <FieldGroup className="gap-5">
         <div className="grid gap-5 md:grid-cols-2">
           <Field data-invalid={!!errors.customer_name}>
-            <FieldLabel htmlFor="customer_name">Customer name</FieldLabel>
+            <FieldLabel htmlFor="customer_name">Business name</FieldLabel>
             <Input id="customer_name" value={form.customer_name} onChange={set('customer_name')} autoComplete="off" aria-invalid={!!errors.customer_name} className={cn(CONTROL, glow('customer_name'))} />
             <FieldError>{errors.customer_name}</FieldError>
           </Field>
           <Field>
             <FieldLabel htmlFor="business_name">
-              Business <span className="font-normal text-muted-foreground">(optional)</span>
+              Customer name <span className="font-normal text-muted-foreground">(optional)</span>
             </FieldLabel>
             <Input id="business_name" value={form.business_name} onChange={set('business_name')} autoComplete="off" className={cn(CONTROL, glow('business_name'))} />
           </Field>

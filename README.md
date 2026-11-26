@@ -54,7 +54,7 @@ Push this folder to a private GitHub repository.
 
 ### Adding leads quickly
 
-On a laptop, **Leads** opens as a table. Type in the tinted top row (Tab moves across, Enter saves), click any cell of an existing lead to edit it, or copy rows from Excel or Google Sheets and paste them into the top row, then **Save all**. Columns in order: customer, number, ticket value (AED), status, channel, service, handled by, business, lost because, note. On phones, use **Log lead**.
+On a laptop, **Leads** opens as a table. Type in the tinted top row (Tab moves across, Enter saves), click any cell of an existing lead to edit it, or copy rows from Excel or Google Sheets and paste them into the top row, then **Save all**. Columns in order: business name, number, ticket value (AED), status, channel, service, handled by, lost because, note, customer name. On phones, use **Log lead**.
 
 ### Every week
 
